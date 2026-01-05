@@ -34,6 +34,13 @@ private:
     void render_queue_view();
     void render_player_view();
     void render_status_bar();
+    void render_toast_notifications();
+
+    // UI helpers
+    void setup_theme();
+    void show_toast(const std::string& message, float duration = 3.0f);
+    void draw_progress_bar(float fraction, const char* label = nullptr);
+    void draw_visual_separator(const char* title = nullptr);
 
     // Commands
     void search_youtube(const std::string& query);
@@ -57,6 +64,19 @@ private:
     int selected_queue_item_;
     bool show_search_;
     bool running_;
+
+    // UI focus and navigation
+    enum class FocusArea { Search, Queue, Player };
+    FocusArea current_focus_;
+    bool vim_mode_enabled_;
+
+    // Toast notifications
+    struct Toast {
+        std::string message;
+        float duration;
+        float time_remaining;
+    };
+    std::vector<Toast> toasts_;
 
     // Async search
     std::future<std::vector<Track>> search_future_;

@@ -23,7 +23,9 @@ Application::Application()
       show_search_(true),
       running_(false),
       search_in_progress_(false),
-      incremental_search_active_(false) {
+      incremental_search_active_(false),
+      current_focus_(FocusArea::Search),
+      vim_mode_enabled_(false) {
     std::memset(search_buffer_, 0, sizeof(search_buffer_));
 }
 
@@ -60,6 +62,9 @@ bool Application::initialize() {
     // Initialize ImTui
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
+
+    // Set up modern theme
+    setup_theme();
 
     screen_ = ImTui_ImplNcurses_Init(true);
     ImTui_ImplText_Init();
@@ -114,15 +119,24 @@ void Application::render() {
     ImTui_ImplText_NewFrame();
     ImGui::NewFrame();
 
-    // Main window
+    for (auto it = toasts_.begin(); it != toasts_.end(); ) {
+        it->time_remaining -= ImGui::GetIO().DeltaTime;
+        if (it->time_remaining <= 0.0f) {
+            it = toasts_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    // Main window with modern styling
     ImGui::SetNextWindowPos(ImVec2(0, 0));
     ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
 
     ImGui::Begin("YouTube TUI", nullptr,
-                 ImGuiWindowFlags_NoTitleBar |
-                 ImGuiWindowFlags_NoResize |
-                 ImGuiWindowFlags_NoMove |
-                 ImGuiWindowFlags_NoCollapse);
+                  ImGuiWindowFlags_NoTitleBar |
+                  ImGuiWindowFlags_NoResize |
+                  ImGuiWindowFlags_NoMove |
+                  ImGuiWindowFlags_NoCollapse);
 
     render_menu_bar();
 
@@ -135,6 +149,9 @@ void Application::render() {
     render_status_bar();
 
     ImGui::End();
+
+    // Render toast notifications
+    render_toast_notifications();
 
     ImGui::Render();
     ImTui_ImplText_RenderDrawData(ImGui::GetDrawData(), screen_);
@@ -160,36 +177,48 @@ void Application::render_menu_bar() {
 }
 
 void Application::render_search_view() {
-    ImGui::Text("Search YouTube:");
+    ImGui::BeginChild("SearchPanel", ImVec2(0, 12), true,
+                     ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::TextColored(ImVec4(0.4f, 0.7f, 1.0f, 1.0f), "🔍 SEARCH YOUTUBE");
+    draw_visual_separator();
 
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.18f, 0.25f, 1.0f));
     if (ImGui::InputText("##search", search_buffer_, sizeof(search_buffer_),
-                         ImGuiInputTextFlags_EnterReturnsTrue)) {
+                          ImGuiInputTextFlags_EnterReturnsTrue)) {
         search_youtube(search_buffer_);
+        show_toast("Searching YouTube...", 2.0f);
     }
+    ImGui::PopStyleColor();
 
     ImGui::SameLine();
     if (ImGui::Button("Search") && std::strlen(search_buffer_) > 0) {
         search_youtube(search_buffer_);
+        show_toast("Searching YouTube...", 2.0f);
     }
 
     if (incremental_search_active_) {
-        ImGui::Text("Searching...");
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "⟳ Searching...");
     }
 
-    // Show incremental results as they come in
     if (incremental_search_active_ || !incremental_results_.empty()) {
-        ImGui::Text("Results:");
-        ImGui::BeginChild("SearchResults", ImVec2(0, 10), true);
+        ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "📋 RESULTS (%zu)", incremental_results_.size());
+        ImGui::BeginChild("SearchResults", ImVec2(0, 0), true);
 
         std::lock_guard<std::mutex> lock(search_mutex_);
         for (size_t i = 0; i < incremental_results_.size(); ++i) {
             const auto& track = incremental_results_[i];
             bool selected = (i == static_cast<size_t>(selected_search_result_));
 
-            if (ImGui::Selectable(track.title.c_str(), selected, ImGuiSelectableFlags_AllowDoubleClick)) {
+            std::string duration_str = track.duration > 0 ?
+                std::to_string(track.duration / 60) + ":" + std::to_string(track.duration % 60) : "LIVE";
+            std::string display_text = track.title + " - " + track.channel + " (" + duration_str + ")";
+
+            if (ImGui::Selectable(display_text.c_str(), selected, ImGuiSelectableFlags_AllowDoubleClick)) {
                 selected_search_result_ = static_cast<int>(i);
                 if (ImGui::IsMouseDoubleClicked(0)) {
                     state_manager_->add_to_queue(track);
+                    show_toast("Added to queue: " + track.title, 3.0f);
                     Logger::info("Added to queue: " + track.title);
                 }
             }
@@ -200,90 +229,171 @@ void Application::render_search_view() {
         if (ImGui::Button("Add to Queue") && selected_search_result_ >= 0 &&
             selected_search_result_ < static_cast<int>(incremental_results_.size())) {
             std::lock_guard<std::mutex> lock(search_mutex_);
-            state_manager_->add_to_queue(incremental_results_[selected_search_result_]);
-        }
-    }
-
-    ImGui::Separator();
-}
-
-void Application::render_queue_view() {
-    ImGui::Text("Queue:");
-    ImGui::BeginChild("Queue", ImVec2(0, 15), true);
-
-    const auto& queue = state_manager_->get_queue();
-    for (size_t i = 0; i < queue.size(); ++i) {
-        const auto& track = queue[i];
-        bool is_current = (i == static_cast<size_t>(state_manager_->get_current_index()));
-        bool selected = (i == static_cast<size_t>(selected_queue_item_));
-
-        std::string label = (is_current ? "> " : "  ") + track.title;
-
-        if (ImGui::Selectable(label.c_str(), selected, ImGuiSelectableFlags_AllowDoubleClick)) {
-            selected_queue_item_ = static_cast<int>(i);
-            if (ImGui::IsMouseDoubleClicked(0)) {
-                state_manager_->play_at_index(i);
-                play_current_track();
-            }
+            const auto& track = incremental_results_[selected_search_result_];
+            state_manager_->add_to_queue(track);
+            show_toast("Added to queue: " + track.title, 3.0f);
         }
     }
 
     ImGui::EndChild();
 }
 
+void Application::render_queue_view() {
+    ImGui::BeginChild("QueuePanel", ImVec2(0, 15), true);
+    const auto& queue = state_manager_->get_queue();
+
+    ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.6f, 1.0f), "🎵 QUEUE (%zu tracks)", queue.size());
+    draw_visual_separator();
+
+    if (queue.empty()) {
+        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "No tracks in queue. Search and add some!");
+    } else {
+        ImGui::BeginChild("QueueList", ImVec2(0, 0), false);
+
+        for (size_t i = 0; i < queue.size(); ++i) {
+            const auto& track = queue[i];
+            bool is_current = (i == static_cast<size_t>(state_manager_->get_current_index()));
+            bool selected = (i == static_cast<size_t>(selected_queue_item_));
+
+            std::string icon = is_current ? "▶️" : "  ";
+            std::string duration_str = track.duration > 0 ?
+                std::to_string(track.duration / 60) + ":" +
+                (track.duration % 60 < 10 ? "0" : "") + std::to_string(track.duration % 60) : "LIVE";
+
+            std::string label = icon + " " + track.title + " - " + track.channel + " (" + duration_str + ")";
+
+            if (is_current) {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.9f, 0.2f, 1.0f));
+            }
+
+            if (ImGui::Selectable(label.c_str(), selected, ImGuiSelectableFlags_AllowDoubleClick)) {
+                selected_queue_item_ = static_cast<int>(i);
+                if (ImGui::IsMouseDoubleClicked(0)) {
+                    state_manager_->play_at_index(i);
+                    play_current_track();
+                    show_toast("Now playing: " + track.title, 2.0f);
+                }
+            }
+
+            if (is_current) {
+                ImGui::PopStyleColor();
+            }
+        }
+
+        ImGui::EndChild();
+    }
+
+    ImGui::EndChild();
+}
+
 void Application::render_player_view() {
-    ImGui::Separator();
-    ImGui::Text("Now Playing:");
+    ImGui::BeginChild("PlayerPanel", ImVec2(0, 0), true);
+    ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1.0f), "🎧 NOW PLAYING");
+    draw_visual_separator();
 
     const Track* current = state_manager_->get_current_track();
     if (current) {
-        ImGui::Text("%s", current->title.c_str());
-        ImGui::Text("Channel: %s", current->channel.c_str());
+        ImGui::TextColored(ImVec4(1.0f, 0.9f, 0.6f, 1.0f), "%s", current->title.c_str());
+        ImGui::TextColored(ImVec4(0.7f, 0.8f, 0.9f, 1.0f), "👤 %s", current->channel.c_str());
 
         double pos = player_->get_position();
         double dur = player_->get_duration();
 
-        ImGui::ProgressBar(dur > 0 ? static_cast<float>(pos / dur) : 0.0f);
-        ImGui::Text("%.0f:%.0f / %.0f:%.0f",
+        float progress = dur > 0 ? static_cast<float>(pos / dur) : 0.0f;
+        draw_progress_bar(progress);
+
+        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.9f, 1.0f), "%.0f:%.0f / %.0f:%.0f",
                    std::floor(pos / 60), std::fmod(pos, 60),
                    std::floor(dur / 60), std::fmod(dur, 60));
     } else {
-        ImGui::Text("No track playing");
+        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "No track playing");
+        ImGui::TextColored(ImVec4(0.4f, 0.4f, 0.5f, 1.0f), "Search and add tracks to get started!");
     }
 
-    // Controls
-    if (ImGui::Button("Previous")) previous_track();
+    ImGui::Spacing();
+
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(2, 0));
+
+    if (ImGui::Button("⏮️")) {
+        previous_track();
+        show_toast("Previous track", 1.5f);
+    }
     ImGui::SameLine();
 
     PlaybackState state = player_->get_state();
     if (state == PlaybackState::Playing) {
-        if (ImGui::Button("Pause")) player_->pause();
+        if (ImGui::Button("⏸️")) {
+            player_->pause();
+            show_toast("Paused", 1.5f);
+        }
     } else {
-        if (ImGui::Button("Play")) player_->play();
+        if (ImGui::Button("▶️")) {
+            player_->play();
+            show_toast("Playing", 1.5f);
+        }
+    }
+    ImGui::SameLine();
+
+    if (ImGui::Button("⏭️")) {
+        next_track();
+        show_toast("Next track", 1.5f);
     }
 
-    ImGui::SameLine();
-    if (ImGui::Button("Next")) next_track();
+    ImGui::PopStyleVar();
 
-    // Volume control
+    ImGui::Spacing();
     float volume = static_cast<float>(player_->get_volume());
-    if (ImGui::SliderFloat("Volume", &volume, 0.0f, 1.0f)) {
+    ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "🔊 VOLUME");
+    if (ImGui::SliderFloat("##volume", &volume, 0.0f, 1.0f, "%.0f%%")) {
         player_->set_volume(volume);
         Config::instance().set_volume(volume);
     }
+
+    ImGui::EndChild();
 }
 
 void Application::render_status_bar() {
-    ImGui::Separator();
+    draw_visual_separator("STATUS");
     PlaybackState state = player_->get_state();
+    const char* state_icon = "⏹️";
     const char* state_str = "Stopped";
+    ImVec4 state_color = ImVec4(0.6f, 0.6f, 0.7f, 1.0f);
+
     switch (state) {
-        case PlaybackState::Playing: state_str = "Playing"; break;
-        case PlaybackState::Paused: state_str = "Paused"; break;
-        case PlaybackState::Buffering: state_str = "Buffering"; break;
-        default: break;
+        case PlaybackState::Playing:
+            state_icon = "▶️";
+            state_str = "Playing";
+            state_color = ImVec4(0.4f, 1.0f, 0.6f, 1.0f);
+            break;
+        case PlaybackState::Paused:
+            state_icon = "⏸️";
+            state_str = "Paused";
+            state_color = ImVec4(1.0f, 0.8f, 0.4f, 1.0f);
+            break;
+        case PlaybackState::Buffering:
+            state_icon = "⏳";
+            state_str = "Buffering";
+            state_color = ImVec4(1.0f, 0.6f, 0.4f, 1.0f);
+            break;
+        default:
+            break;
     }
-    ImGui::Text("Status: %s | Queue: %zu tracks", state_str, state_manager_->get_queue().size());
+
+    ImGui::TextColored(state_color, "%s %s", state_icon, state_str);
+    ImGui::SameLine();
+
+    size_t queue_size = state_manager_->get_queue().size();
+    ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "| 📋 %zu tracks", queue_size);
+
+    if (state_manager_->is_shuffle_enabled()) {
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.8f, 1.0f), "| 🔀 Shuffle ON");
+    }
+
+    if (state_manager_->is_repeat_enabled()) {
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(0.8f, 0.6f, 1.0f, 1.0f), "| 🔁 Repeat ON");
+    }
 }
 
 void Application::handle_input() {
@@ -337,6 +447,101 @@ void Application::next_track() {
 void Application::previous_track() {
     state_manager_->play_previous();
     play_current_track();
+}
+
+void Application::setup_theme() {
+    ImGuiStyle& style = ImGui::GetStyle();
+
+    // Retro-futuristic color scheme
+    ImVec4* colors = style.Colors;
+    colors[ImGuiCol_WindowBg] = ImVec4(0.08f, 0.08f, 0.12f, 1.00f);     // Dark blue-black
+    colors[ImGuiCol_Border] = ImVec4(0.30f, 0.40f, 0.60f, 0.50f);       // Electric blue border
+    colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+
+    // Text colors - neon style
+    colors[ImGuiCol_Text] = ImVec4(0.90f, 0.95f, 1.00f, 1.00f);         // Bright white
+    colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.60f, 1.00f); // Muted gray
+
+    // Interactive elements
+    colors[ImGuiCol_Button] = ImVec4(0.20f, 0.25f, 0.35f, 1.00f);       // Dark blue-gray
+    colors[ImGuiCol_ButtonHovered] = ImVec4(0.30f, 0.40f, 0.60f, 1.00f); // Electric blue hover
+    colors[ImGuiCol_ButtonActive] = ImVec4(0.40f, 0.50f, 0.80f, 1.00f);  // Bright blue active
+
+    // Selection colors
+    colors[ImGuiCol_Header] = ImVec4(0.25f, 0.30f, 0.45f, 1.00f);        // Selected item
+    colors[ImGuiCol_HeaderHovered] = ImVec4(0.35f, 0.45f, 0.65f, 1.00f); // Selected hover
+    colors[ImGuiCol_HeaderActive] = ImVec4(0.45f, 0.55f, 0.85f, 1.00f);  // Selected active
+
+    // Frame colors (inputs, progress bars)
+    colors[ImGuiCol_FrameBg] = ImVec4(0.15f, 0.18f, 0.25f, 1.00f);       // Dark input background
+    colors[ImGuiCol_FrameBgHovered] = ImVec4(0.20f, 0.25f, 0.35f, 1.00f);
+    colors[ImGuiCol_FrameBgActive] = ImVec4(0.25f, 0.30f, 0.45f, 1.00f);
+
+    // Progress bar colors
+    colors[ImGuiCol_PlotHistogram] = ImVec4(0.40f, 0.60f, 1.00f, 1.00f); // Electric blue progress
+
+    // Style adjustments for terminal
+    style.WindowBorderSize = 1.0f;
+    style.FrameBorderSize = 1.0f;
+    style.FrameRounding = 0.0f;  // Sharp corners for retro look
+    style.WindowRounding = 0.0f;
+    style.ChildRounding = 0.0f;
+    style.PopupRounding = 0.0f;
+    style.ScrollbarRounding = 0.0f;
+
+    // Spacing for terminal readability
+    style.ItemSpacing = ImVec2(8.0f, 4.0f);
+    style.WindowPadding = ImVec2(8.0f, 8.0f);
+}
+
+void Application::show_toast(const std::string& message, float duration) {
+    toasts_.push_back({message, duration, duration});
+}
+
+void Application::draw_progress_bar(float fraction, const char* label) {
+    // Custom progress bar with ASCII-style visualization
+    ImGui::ProgressBar(fraction, ImVec2(-1, 20), label);
+
+    // Add ASCII progress indicator below
+    if (fraction > 0.0f) {
+        char progress_ascii[21];
+        int filled = static_cast<int>(fraction * 20.0f);
+        for (int i = 0; i < 20; ++i) {
+            progress_ascii[i] = (i < filled) ? '█' : '░';
+        }
+        progress_ascii[20] = '\0';
+        ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "%s %.0f%%", progress_ascii, fraction * 100.0f);
+    }
+}
+
+void Application::draw_visual_separator(const char* title) {
+    if (title) {
+        ImGui::TextColored(ImVec4(0.7f, 0.8f, 1.0f, 1.0f), "═══ %s %s", title,
+                          std::string(50 - strlen(title) - 5, '=').c_str());
+    } else {
+        ImGui::TextColored(ImVec4(0.4f, 0.5f, 0.7f, 1.0f), std::string(60, '═').c_str());
+    }
+}
+
+void Application::render_toast_notifications() {
+    // Render toast notifications in bottom-right corner
+    ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 300, ImGui::GetIO().DisplaySize.y - 100));
+    ImGui::SetNextWindowSize(ImVec2(280, 80));
+
+    if (!toasts_.empty()) {
+        ImGui::Begin("Toasts", nullptr,
+                    ImGuiWindowFlags_NoTitleBar |
+                    ImGuiWindowFlags_NoResize |
+                    ImGuiWindowFlags_NoMove |
+                    ImGuiWindowFlags_NoScrollbar |
+                    ImGuiWindowFlags_NoInputs);
+
+        for (auto& toast : toasts_) {
+            ImGui::TextWrapped("%s", toast.message.c_str());
+        }
+
+        ImGui::End();
+    }
 }
 
 } // namespace ytui
