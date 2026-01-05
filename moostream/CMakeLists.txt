@@ -77,3 +77,27 @@ endif()
 
 # Install target
 install(TARGETS moostream DESTINATION bin)
+
+# Tests
+if(BUILD_TESTS)
+    # Test executables
+    add_executable(test_unicode test/test_unicode.cpp)
+    target_link_libraries(test_unicode
+        PRIVATE
+        Threads::Threads
+        ${NCURSES_LIBRARIES}
+        ${MPV_LIBRARIES}
+        ${CURL_LIBRARIES}
+        imtui-ncurses
+    )
+
+    add_executable(test_search test/test_search.cpp)
+    target_link_libraries(test_search
+        PRIVATE
+        Threads::Threads
+        ${NCURSES_LIBRARIES}
+        ${MPV_LIBRARIES}
+        ${CURL_LIBRARIES}
+        imtui-ncurses
+    )
+endif()

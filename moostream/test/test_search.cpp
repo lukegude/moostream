@@ -1,6 +1,6 @@
-#include "youtube/extractor.h"
-#include "utils/logger.h"
-#include "core/config.h"
+#include "../src/youtube/extractor.h"
+#include "../src/utils/logger.h"
+#include "../src/core/config.h"
 #include <iostream>
 
 int main() {

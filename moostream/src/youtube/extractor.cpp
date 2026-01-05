@@ -65,7 +65,7 @@ std::future<Track> YouTubeExtractor::extract_info_async(const std::string& url) 
 }
 
     std::vector<Track> YouTubeExtractor::search(const std::string& query, int max_results) {
-    Logger::info("Starting YouTube API search for: " + query);
+    Logger::info("Starting YouTube API search for: '" + query + "'");
     try {
         std::string access_token = get_access_token();
         if (access_token.empty()) {
@@ -200,8 +200,11 @@ Track YouTubeExtractor::parse_track_json(const std::string& json) {
         size_t end = json.find('"', start + 1);
         if (start != std::string::npos && end != std::string::npos) {
             std::string title = json.substr(start + 1, end - start - 1);
-            // Decode Unicode escapes
-            track.title = decode_unicode_escapes(title);
+             Logger::info("yt-dlp raw title: '" + title + "'");
+             // Decode Unicode escapes
+             std::string decoded_title = decode_unicode_escapes(title);
+             Logger::info("yt-dlp decoded title: '" + decoded_title + "'");
+              track.title = sanitize_title(decoded_title);
         }
     }
 
@@ -275,8 +278,11 @@ std::vector<Track> YouTubeExtractor::parse_youtube_api_search_results(const std:
                 const auto& snippet = item["snippet"];
 
                 if (snippet.contains("title")) {
-                    track.title = snippet["title"];
-                }
+                     std::string raw_title = snippet["title"];
+                     Logger::info("YouTube API raw title: '" + raw_title + "'");
+                     track.title = sanitize_title(raw_title);
+                     Logger::info("YouTube API sanitized title: '" + track.title + "'");
+                 }
 
                 if (snippet.contains("channelTitle")) {
                     track.channel = snippet["channelTitle"];
@@ -345,8 +351,11 @@ Track YouTubeExtractor::parse_single_search_result(const std::string& json_line)
         size_t end = json_line.find('"', start + 1);
         if (start != std::string::npos && end != std::string::npos) {
             std::string title = json_line.substr(start + 1, end - start - 1);
-            // Decode Unicode escapes like \u2615\ufe0f
-            track.title = decode_unicode_escapes(title);
+             Logger::info("yt-dlp search raw title: '" + title + "'");
+             // Decode Unicode escapes like \u2615\ufe0f
+             std::string decoded_title = decode_unicode_escapes(title);
+             Logger::info("yt-dlp search decoded title: '" + decoded_title + "'");
+              track.title = sanitize_title(decoded_title);
         }
     }
 
@@ -397,23 +406,57 @@ Track YouTubeExtractor::parse_single_search_result(const std::string& json_line)
     return track;
 }
 
+std::string YouTubeExtractor::sanitize_title(const std::string& input) {
+    std::string result;
+    for (char c : input) {
+        // Keep only ASCII printable characters (32-126) and basic whitespace
+        if ((c >= 32 && c <= 126) || c == '\t' || c == '\n' || c == '\r') {
+            result += c;
+        }
+        // Skip unicode characters that would display as question marks
+    }
+    return result;
+}
+
 std::string YouTubeExtractor::decode_unicode_escapes(const std::string& input) {
     std::string result = input;
 
-    // Simple Unicode escape decoding (\uXXXX)
+    // Unicode escape decoding (\uXXXX)
     size_t pos = 0;
     while ((pos = result.find("\\u", pos)) != std::string::npos) {
         if (pos + 5 < result.size()) {
             std::string hex = result.substr(pos + 2, 4);
             try {
-                int code = std::stoi(hex, nullptr, 16);
-                if (code >= 0x20 && code <= 0x7E) {
-                    // ASCII range
-                    result.replace(pos, 6, 1, static_cast<char>(code));
+                int codepoint = std::stoi(hex, nullptr, 16);
+
+                // Convert Unicode codepoint to UTF-8
+                std::string utf8_bytes;
+                if (codepoint <= 0x7F) {
+                    // 1-byte UTF-8
+                    utf8_bytes = static_cast<char>(codepoint);
+                } else if (codepoint <= 0x7FF) {
+                    // 2-byte UTF-8
+                    utf8_bytes = static_cast<char>(0xC0 | (codepoint >> 6));
+                    utf8_bytes += static_cast<char>(0x80 | (codepoint & 0x3F));
+                } else if (codepoint <= 0xFFFF) {
+                    // 3-byte UTF-8
+                    utf8_bytes = static_cast<char>(0xE0 | (codepoint >> 12));
+                    utf8_bytes += static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
+                    utf8_bytes += static_cast<char>(0x80 | (codepoint & 0x3F));
+                } else if (codepoint <= 0x10FFFF) {
+                    // 4-byte UTF-8
+                    utf8_bytes = static_cast<char>(0xF0 | (codepoint >> 18));
+                    utf8_bytes += static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F));
+                    utf8_bytes += static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
+                    utf8_bytes += static_cast<char>(0x80 | (codepoint & 0x3F));
                 } else {
-                    // For now, just remove the escape for non-ASCII
-                    result.erase(pos, 6);
+                    // Invalid codepoint, skip
+                    pos += 6;
+                    continue;
                 }
+
+                result.replace(pos, 6, utf8_bytes);
+                pos += utf8_bytes.length();
             } catch (const std::exception&) {
                 pos += 2; // Skip this invalid escape
             }

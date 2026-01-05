@@ -8,6 +8,7 @@
 #include "imtui/imtui-impl-ncurses.h"
 
 #include <cstring>
+#include <clocale>
 #include <ncurses.h>
 #include <unistd.h>
 #include <algorithm>
@@ -40,11 +41,13 @@ Application::~Application() {
 }
 
 bool Application::initialize() {
-    // Initialize logger
-    Logger::init("/tmp/moostream.log");
-    Logger::info("Initializing Moostream");
+    // CRITICAL: Set UTF-8 locale BEFORE ncurses initialization for proper unicode support
+    setlocale(LC_ALL, "");
 
-    // Load config
+    // MPV requires C locale for LC_NUMERIC to avoid parsing issues
+    setlocale(LC_NUMERIC, "C");
+
+    Logger::init("/tmp/moostream.log");
     Config::instance().load();
 
     // Create components

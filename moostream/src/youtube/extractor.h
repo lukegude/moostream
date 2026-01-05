@@ -32,13 +32,16 @@ public:
     // OAuth authentication
     std::string get_access_token();
 
+    // Public for testing
+    std::string decode_unicode_escapes(const std::string& input);
+    std::string sanitize_title(const std::string& input);
+
 private:
     std::string execute_ytdlp(const std::vector<std::string>& args);
     Track parse_track_json(const std::string& json);
     std::vector<Track> parse_search_results(const std::string& json);
     std::vector<Track> parse_youtube_api_search_results(const std::string& json);
     Track parse_single_search_result(const std::string& json_line);
-    std::string decode_unicode_escapes(const std::string& input);
     std::string url_encode(const std::string& input);
 
     // YouTube API methods
