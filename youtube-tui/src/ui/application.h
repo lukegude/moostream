@@ -31,7 +31,10 @@ private:
     // UI rendering
     void render_menu_bar();
     void render_search_view();
+    void render_url_view();
     void render_queue_view();
+    void render_queue_tab();
+    void render_playlists_tab();
     void render_player_view();
     void render_status_bar();
     void render_toast_notifications();
@@ -44,6 +47,7 @@ private:
 
     // Commands
     void search_youtube(const std::string& query);
+    void handle_url_input(const std::string& url);
     void play_url(const std::string& url);
     void play_current_track();
     void next_track();
@@ -59,10 +63,12 @@ private:
 
     // UI state
     char search_buffer_[256];
+    char url_buffer_[256];
     std::vector<Track> search_results_;
     int selected_search_result_;
     int selected_queue_item_;
     bool show_search_;
+    bool live_only_;
     bool running_;
 
     // UI focus and navigation

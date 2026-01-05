@@ -25,12 +25,14 @@ Application::Application()
       selected_search_result_(0),
       selected_queue_item_(0),
       show_search_(true),
+      live_only_(false),
       running_(false),
       search_in_progress_(false),
       incremental_search_active_(false),
       current_focus_(FocusArea::Search),
       vim_mode_enabled_(false) {
     std::memset(search_buffer_, 0, sizeof(search_buffer_));
+    std::memset(url_buffer_, 0, sizeof(url_buffer_));
 }
 
 Application::~Application() {
@@ -164,8 +166,16 @@ void Application::render() {
 
     render_menu_bar();
 
-    if (show_search_) {
-        render_search_view();
+    if (ImGui::BeginTabBar("MainTabs")) {
+        if (ImGui::BeginTabItem("Search")) {
+            render_search_view();
+            ImGui::EndTabItem();
+        }
+        if (ImGui::BeginTabItem("URL")) {
+            render_url_view();
+            ImGui::EndTabItem();
+        }
+        ImGui::EndTabBar();
     }
 
     render_queue_view();
@@ -217,6 +227,9 @@ void Application::render_search_view() {
         show_toast("Searching YouTube...", 2.0f);
     }
     ImGui::PopStyleColor();
+
+    ImGui::SameLine();
+    ImGui::Checkbox("Live", &live_only_);
 
     ImGui::SameLine();
     if (ImGui::Button("Search") && std::strlen(search_buffer_) > 0) {
@@ -272,8 +285,52 @@ void Application::render_search_view() {
     ImGui::EndChild();
 }
 
+void Application::render_url_view() {
+    ImGui::BeginChild("URLPanel", ImVec2(0, 12), true,
+                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::TextColored(ImVec4(0.4f, 0.7f, 1.0f, 1.0f), "[URL] YouTube Direct");
+    draw_visual_separator();
+
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.18f, 0.25f, 1.0f));
+    bool enter_pressed = ImGui::InputText("##url", url_buffer_, sizeof(url_buffer_), ImGuiInputTextFlags_EnterReturnsTrue);
+    if (enter_pressed && std::strlen(url_buffer_) > 0) {
+        handle_url_input(url_buffer_);
+        show_toast("Playing URL...", 2.0f);
+    }
+    ImGui::PopStyleColor();
+
+    ImGui::SameLine();
+    if (ImGui::Button("Play URL") && std::strlen(url_buffer_) > 0) {
+        handle_url_input(url_buffer_);
+        show_toast("Playing URL...", 2.0f);
+        // Ensure UI stays responsive after action
+        ImGui::SetWindowFocus(nullptr);
+    }
+
+    ImGui::EndChild();
+}
+
 void Application::render_queue_view() {
     ImGui::BeginChild("QueuePanel", ImVec2(0, 15), true);
+
+    if (ImGui::BeginTabBar("QueueTabs")) {
+        if (ImGui::BeginTabItem("Queue")) {
+            render_queue_tab();
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Playlists")) {
+            render_playlists_tab();
+            ImGui::EndTabItem();
+        }
+
+        ImGui::EndTabBar();
+    }
+
+    ImGui::EndChild();
+}
+
+void Application::render_queue_tab() {
     const auto& queue = state_manager_->get_queue();
 
     ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.6f, 1.0f), "Queue: (%zu tracks)", queue.size());
@@ -316,8 +373,50 @@ void Application::render_queue_view() {
 
         ImGui::EndChild();
     }
+}
 
-    ImGui::EndChild();
+void Application::render_playlists_tab() {
+    const auto& playlists = state_manager_->get_playlists();
+
+    ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.6f, 1.0f), "Saved Playlists: (%zu playlists)", playlists.size());
+    draw_visual_separator();
+
+    if (ImGui::Button("Save Current Queue as Playlist")) {
+        // TODO: Show input dialog for playlist name
+        std::string name = "My Playlist"; // Placeholder
+        state_manager_->save_queue_as_playlist(name);
+        show_toast("Saved queue as playlist: " + name, 2.0f);
+    }
+
+    if (playlists.empty()) {
+        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "No saved playlists. Save your current queue!");
+    } else {
+        ImGui::BeginChild("PlaylistsList", ImVec2(0, 0), false);
+
+        for (const auto& pair : playlists) {
+            const Playlist& playlist = pair.second;
+
+            std::string label = playlist.name + " (" + std::to_string(playlist.size()) + " tracks)";
+
+            if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick)) {
+                if (ImGui::IsMouseDoubleClicked(0)) {
+                    state_manager_->load_playlist_to_queue(playlist.id);
+                    show_toast("Loaded playlist: " + playlist.name, 2.0f);
+                }
+            }
+
+            // Context menu for delete
+            if (ImGui::BeginPopupContextItem()) {
+                if (ImGui::MenuItem("Delete Playlist")) {
+                    state_manager_->delete_playlist(playlist.id);
+                    show_toast("Deleted playlist: " + playlist.name, 2.0f);
+                }
+                ImGui::EndPopup();
+            }
+        }
+
+        ImGui::EndChild();
+    }
 }
 
 void Application::render_player_view() {
@@ -448,11 +547,41 @@ void Application::search_youtube(const std::string& query) {
         extractor_->search_streaming(query, 10, [this](const Track& track) {
             // This callback will be called for each result as it comes in
             std::lock_guard<std::mutex> lock(search_mutex_);
-            incremental_results_.push_back(track);
+            // Filter for live videos if live_only_ is enabled
+            if (!live_only_ || track.is_live) {
+                incremental_results_.push_back(track);
+            }
         });
         // Mark search as complete
         std::lock_guard<std::mutex> lock(search_mutex_);
         search_in_progress_ = false;
+    }).detach();
+}
+
+void Application::handle_url_input(const std::string& url) {
+    Logger::info("Handling URL input: " + url);
+
+    // Extract track info from URL in background
+    std::thread([this, url]() {
+        try {
+            Track track = extractor_->extract_info(url);
+            if (track.is_valid()) {
+                // Ensure the URL is set for playback
+                track.url = url;
+                // Add to queue and play
+                state_manager_->add_to_queue(track);
+                // Play the newly added track
+                state_manager_->play_next();
+                play_current_track();
+            } else {
+                // Fallback: try to play URL directly
+                play_url(url);
+            }
+        } catch (const std::exception& e) {
+            Logger::error("Failed to extract URL info: " + std::string(e.what()));
+            // Fallback: try to play URL directly
+            play_url(url);
+        }
     }).detach();
 }
 

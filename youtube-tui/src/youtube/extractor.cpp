@@ -41,6 +41,8 @@ Track YouTubeExtractor::extract_info(const std::string& url) {
             "--dump-json",
             "--no-playlist",
             "--quiet",
+            "--js-runtimes", "deno",
+            "--cookies", "../www.youtube.com_cookies.txt",
             url
         };
 
@@ -58,7 +60,7 @@ std::future<Track> YouTubeExtractor::extract_info_async(const std::string& url) 
     });
 }
 
-std::vector<Track> YouTubeExtractor::search(const std::string& query, int max_results) {
+    std::vector<Track> YouTubeExtractor::search(const std::string& query, int max_results) {
     try {
         std::string search_query = "ytsearch" + std::to_string(max_results) + ":" + query;
 
@@ -66,6 +68,8 @@ std::vector<Track> YouTubeExtractor::search(const std::string& query, int max_re
             "--dump-json",
             "--quiet",
             "--no-warnings",
+            "--js-runtimes", "deno",
+            "--cookies", "../www.youtube.com_cookies.txt",
             search_query
         };
 
@@ -83,7 +87,7 @@ std::future<std::vector<Track>> YouTubeExtractor::search_async(const std::string
     });
 }
 
-void YouTubeExtractor::search_streaming(const std::string& query, int max_results,
+    void YouTubeExtractor::search_streaming(const std::string& query, int max_results,
                                        std::function<void(const Track&)> result_callback) {
     try {
         std::string search_query = "ytsearch" + std::to_string(max_results) + ":" + query;
@@ -92,6 +96,8 @@ void YouTubeExtractor::search_streaming(const std::string& query, int max_result
             "--dump-json",
             "--quiet",
             "--no-warnings",
+            "--js-runtimes", "deno",
+            "--cookies", "../www.youtube.com_cookies.txt",
             search_query
         };
 
@@ -114,13 +120,15 @@ void YouTubeExtractor::search_streaming(const std::string& query, int max_result
     }
 }
 
-std::string YouTubeExtractor::get_stream_url(const std::string& video_url) {
+    std::string YouTubeExtractor::get_stream_url(const std::string& video_url) {
     try {
         std::vector<std::string> args = {
             "--get-url",
             "--format", "bestaudio",
             "--no-playlist",
             "--quiet",
+            "--js-runtimes", "deno",
+            "--cookies", "../www.youtube.com_cookies.txt",
             video_url
         };
 
@@ -139,18 +147,76 @@ std::string YouTubeExtractor::get_stream_url(const std::string& video_url) {
 }
 
 Track YouTubeExtractor::parse_track_json(const std::string& json) {
-    // TODO: Implement proper JSON parsing using nlohmann/json
-    // For now, this is a placeholder
     Track track;
 
-    // Simple parsing - in real implementation use nlohmann/json
-    // This is just to make it compile
-    if (json.find("\"id\"") != std::string::npos) {
-        track.id = "placeholder_id";
-        track.title = "Placeholder Title";
-        track.channel = "Placeholder Channel";
-        track.duration = 0;
-        track.is_live = false;
+    // Simple string-based JSON parsing for key fields
+    // This extracts: id, title, uploader, duration, is_live, webpage_url
+
+    // Extract id
+    size_t id_pos = json.find("\"id\":");
+    if (id_pos != std::string::npos) {
+        size_t start = json.find('"', id_pos + 6);
+        size_t end = json.find('"', start + 1);
+        if (start != std::string::npos && end != std::string::npos) {
+            track.id = json.substr(start + 1, end - start - 1);
+        }
+    }
+
+    // Extract title
+    size_t title_pos = json.find("\"title\":");
+    if (title_pos != std::string::npos) {
+        size_t start = json.find('"', title_pos + 9);
+        size_t end = json.find('"', start + 1);
+        if (start != std::string::npos && end != std::string::npos) {
+            std::string title = json.substr(start + 1, end - start - 1);
+            // Decode Unicode escapes
+            track.title = decode_unicode_escapes(title);
+        }
+    }
+
+    // Extract uploader (channel)
+    size_t uploader_pos = json.find("\"uploader\":");
+    if (uploader_pos != std::string::npos) {
+        size_t start = json.find('"', uploader_pos + 12);
+        size_t end = json.find('"', start + 1);
+        if (start != std::string::npos && end != std::string::npos) {
+            track.channel = json.substr(start + 1, end - start - 1);
+        }
+    }
+
+    // Extract duration
+    size_t duration_pos = json.find("\"duration\":");
+    if (duration_pos != std::string::npos) {
+        size_t start = json.find_first_not_of(" \t", duration_pos + 12);
+        size_t end = json.find_first_of(",}", start);
+        if (start != std::string::npos && end != std::string::npos) {
+            try {
+                track.duration = std::stod(json.substr(start, end - start));
+            } catch (const std::exception&) {
+                track.duration = 0;
+            }
+        }
+    }
+
+    // Check if it's live
+    size_t live_pos = json.find("\"is_live\":");
+    if (live_pos != std::string::npos) {
+        size_t start = json.find_first_not_of(" \t", live_pos + 11);
+        size_t end = json.find_first_of(",}", start);
+        if (start != std::string::npos && end != std::string::npos) {
+            std::string live_str = json.substr(start, end - start);
+            track.is_live = (live_str.find("true") != std::string::npos);
+        }
+    }
+
+    // Extract webpage_url as the main URL
+    size_t url_pos = json.find("\"webpage_url\":");
+    if (url_pos != std::string::npos) {
+        size_t start = json.find('"', url_pos + 15);
+        size_t end = json.find('"', start + 1);
+        if (start != std::string::npos && end != std::string::npos) {
+            track.url = json.substr(start + 1, end - start - 1);
+        }
     }
 
     return track;

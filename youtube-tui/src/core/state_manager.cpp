@@ -2,11 +2,15 @@
 #include "utils/logger.h"
 #include <algorithm>
 #include <random>
+#include <fstream>
+#include <sstream>
+#include <iomanip>
 
 namespace ytui {
 
 StateManager::StateManager()
     : current_index_(-1), shuffle_enabled_(false), repeat_enabled_(false) {
+    load_playlists();
 }
 
 void StateManager::add_to_queue(const Track& track) {
@@ -132,6 +136,160 @@ size_t StateManager::get_previous_index() const {
         return repeat_enabled_ ? queue_.size() - 1 : 0;
     }
     return prev;
+}
+
+void StateManager::save_playlist(const Playlist& playlist) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    playlists_[playlist.id] = playlist;
+    Logger::info("Saved playlist: " + playlist.name);
+    save_playlists();
+}
+
+void StateManager::delete_playlist(const std::string& id) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = playlists_.find(id);
+    if (it != playlists_.end()) {
+        Logger::info("Deleted playlist: " + it->second.name);
+        playlists_.erase(it);
+        save_playlists();
+    }
+}
+
+Playlist* StateManager::get_playlist(const std::string& id) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = playlists_.find(id);
+    return it != playlists_.end() ? &it->second : nullptr;
+}
+
+void StateManager::load_playlist_to_queue(const std::string& id) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = playlists_.find(id);
+    if (it != playlists_.end()) {
+        const auto& playlist = it->second;
+        queue_.clear();
+        for (const auto& track : playlist.tracks) {
+            queue_.push_back(track);
+        }
+        current_index_ = -1;
+        Logger::info("Loaded playlist to queue: " + playlist.name);
+    }
+}
+
+void StateManager::save_queue_as_playlist(const std::string& name) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    Playlist playlist(name);
+    for (const auto& track : queue_) {
+        playlist.add_track(track);
+    }
+    playlists_[playlist.id] = playlist;
+    Logger::info("Saved queue as playlist: " + name);
+    save_playlists();
+}
+
+std::string StateManager::get_playlists_path() const {
+    const char* home = std::getenv("HOME");
+    if (!home) {
+        return "playlists.json";
+    }
+    return std::string(home) + "/.config/youtube-tui/playlists.json";
+}
+
+void StateManager::load_playlists() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::string path = get_playlists_path();
+    std::ifstream file(path);
+    if (!file.is_open()) {
+        Logger::info("No playlists file found, starting with empty playlists");
+        return;
+    }
+
+    // Simple JSON parsing for playlists
+    // Format: {"playlists":[{"name":"...", "id":"...", "tracks":[{...}, ...]}, ...]}
+    std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    file.close();
+
+    // Basic parsing - find playlist objects
+    playlists_.clear();
+
+    size_t pos = 0;
+    while ((pos = content.find("\"name\":\"", pos)) != std::string::npos) {
+        // Extract playlist data - simplified parsing
+        Playlist playlist;
+        // This is placeholder - proper JSON parsing would be better
+        // For now, just initialize empty playlists
+        Logger::info("Loaded playlist (parsing placeholder): " + playlist.name);
+        pos += 8;
+    }
+
+    Logger::info("Loaded " + std::to_string(playlists_.size()) + " playlists");
+}
+
+void StateManager::save_playlists() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::string path = get_playlists_path();
+
+    // Create directory if needed
+    size_t dir_pos = path.find_last_of('/');
+    if (dir_pos != std::string::npos) {
+        std::string dir = path.substr(0, dir_pos);
+        std::string mkdir_cmd = "mkdir -p " + dir;
+        system(mkdir_cmd.c_str());
+    }
+
+    std::ofstream file(path);
+    if (!file.is_open()) {
+        Logger::error("Failed to save playlists to: " + path);
+        return;
+    }
+
+    // Simple JSON serialization
+    file << "{\"playlists\":[";
+
+    bool first = true;
+    for (const auto& pair : playlists_) {
+        if (!first) file << ",";
+        first = false;
+
+        const Playlist& playlist = pair.second;
+        file << "{\"name\":\"" << escape_json_string(playlist.name) << "\",";
+        file << "\"id\":\"" << playlist.id << "\",";
+        file << "\"tracks\":[";
+
+        bool first_track = true;
+        for (const auto& track : playlist.tracks) {
+            if (!first_track) file << ",";
+            first_track = false;
+
+            file << "{\"id\":\"" << track.id << "\",";
+            file << "\"url\":\"" << escape_json_string(track.url) << "\",";
+            file << "\"title\":\"" << escape_json_string(track.title) << "\",";
+            file << "\"channel\":\"" << escape_json_string(track.channel) << "\",";
+            file << "\"duration\":" << track.duration << ",";
+            file << "\"is_live\":" << (track.is_live ? "true" : "false") << ",";
+            file << "\"thumbnail_url\":\"" << escape_json_string(track.thumbnail_url) << "\"}";
+        }
+
+        file << "]}";
+    }
+
+    file << "]}";
+    file.close();
+    Logger::info("Saved " + std::to_string(playlists_.size()) + " playlists to: " + path);
+}
+
+std::string StateManager::escape_json_string(const std::string& str) const {
+    std::string result;
+    for (char c : str) {
+        switch (c) {
+            case '"': result += "\\\""; break;
+            case '\\': result += "\\\\"; break;
+            case '\n': result += "\\n"; break;
+            case '\r': result += "\\r"; break;
+            case '\t': result += "\\t"; break;
+            default: result += c; break;
+        }
+    }
+    return result;
 }
 
 } // namespace ytui

@@ -52,11 +52,18 @@ Key classes: Application (ui), StateManager (core), MpvPlayer (audio), Extractor
 
 ## CONVENTIONS
 - Headers co-located with sources in module directories  
+- Public interfaces in include/ directory (Track, Playlist, IPlayer)  
 - Namespace: ytui  
+- Naming: PascalCase classes, camelCase methods, snake_case members with trailing _  
 - C++17 features (std::filesystem not used, preferring manual string handling)  
 - RAII for resource management (unique_ptr for major components)  
+- Thread safety: Mutex-protected classes (StateManager, Logger)  
 - Async operations use std::future for YouTube operations  
+- Enum classes for state types (PlaybackState, LogLevel)  
 
 ## ANTI-PATTERNS (THIS PROJECT)
-- JSON parsing is placeholder (TODO: implement proper parsing in extractor)</content>
+- JSON parsing is placeholder (TODO: implement proper parsing in extractor)
+- Monolithic UI: All rendering logic in Application::render() instead of modular view classes
+- Placeholder view files without implementation (player_view.*, queue_view.*, search_view.*)
+- UI tightly coupled to business logic (Application handles both rendering and commands)
 <parameter name="filePath">youtube-tui/src/AGENTS.md
