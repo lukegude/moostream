@@ -21,13 +21,14 @@ A terminal-based YouTube audio player built with imtui and libmpv. Stream YouTub
 - C++17 compatible compiler
 - ncurses
 - libmpv
+- curl (for YouTube API requests)
 - yt-dlp (for YouTube stream extraction)
 
 ### Ubuntu/Debian
 
 ```bash
 sudo apt update
-sudo apt install build-essential cmake libncurses-dev libmpv-dev yt-dlp pkg-config
+sudo apt install build-essential cmake libncurses-dev libmpv-dev libcurl4-openssl-dev yt-dlp pkg-config
 ```
 
 ### Arch Linux
@@ -67,11 +68,23 @@ cmake ..
 make -j$(nproc)
 ```
 
-4. Run the application:
+4. Authenticate with YouTube (one-time setup):
+
+```bash
+./moostream auth
+```
+This will display a URL and code. Complete the authorization in your browser, and the program will automatically detect when it's done.
+
+5. Run the application:
 
 ```bash
 ./moostream
 ```
+
+## Command Line Options
+
+- `moostream` - Run the main application
+- `moostream auth` - Set up YouTube OAuth authentication
 
 ## Installation
 
@@ -107,7 +120,31 @@ volume=0.7
 shuffle=false
 repeat=false
 ytdlp_path=yt-dlp
+youtube_client_id=YOUR_OAUTH_CLIENT_ID_HERE
+youtube_access_token=auto_generated
+youtube_refresh_token=auto_generated
 ```
+
+### YouTube OAuth Setup
+
+To use the YouTube search functionality, you need OAuth 2.0 credentials:
+
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select an existing one
+3. **Enable the YouTube Data API v3** (required!)
+4. Configure the OAuth consent screen (set app name, support email, etc.)
+5. Create OAuth 2.0 credentials (Client ID) - choose "TVs and Limited Input devices"
+6. The JSON file contains your `client_id` and `client_secret`
+7. Add both `client_id` and `client_secret` to your config file as `youtube_client_id` and `youtube_client_secret`
+8. On first run, the application will guide you through OAuth authentication
+
+**Troubleshooting:**
+- Make sure YouTube Data API v3 is enabled in your project
+- Make sure the OAuth consent screen is properly configured
+- The client ID must be associated with the project that has the API enabled
+- Check `/tmp/moostream.log` for error messages
+
+Note: OAuth provides better security than API keys and allows higher rate limits.
 
 ### Logs
 

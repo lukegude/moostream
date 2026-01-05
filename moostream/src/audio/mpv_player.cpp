@@ -17,6 +17,12 @@ MpvPlayer::MpvPlayer() : mpv_(nullptr), state_(PlaybackState::Stopped) {
     mpv_set_option_string(mpv_, "terminal", "no");
     mpv_set_option_string(mpv_, "msg-level", "all=error");
 
+    // Buffering optimizations for faster loading
+    mpv_set_option_string(mpv_, "cache", "yes");
+    mpv_set_option_string(mpv_, "cache-secs", "10");
+    mpv_set_option_string(mpv_, "demuxer-readahead-secs", "10");
+    mpv_set_option_string(mpv_, "cache-pause", "no");  // Don't pause during buffering
+
     // Initialize
     if (mpv_initialize(mpv_) < 0) {
         Logger::error("Failed to initialize MPV");

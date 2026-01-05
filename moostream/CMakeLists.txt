@@ -18,6 +18,9 @@ pkg_check_modules(NCURSES REQUIRED ncurses)
 # Find mpv
 pkg_check_modules(MPV REQUIRED mpv)
 
+# Find curl
+pkg_check_modules(CURL REQUIRED libcurl)
+
 # Add imtui as subdirectory
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/imtui/CMakeLists.txt")
     add_subdirectory(external/imtui)
@@ -29,8 +32,10 @@ endif()
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/external/nlohmann_json/include
     ${NCURSES_INCLUDE_DIRS}
     ${MPV_INCLUDE_DIRS}
+    ${CURL_INCLUDE_DIRS}
 )
 
 # Source files
@@ -42,6 +47,7 @@ set(SOURCES
     src/ui/player_view.cpp
     src/audio/mpv_player.cpp
     src/youtube/extractor.cpp
+    src/youtube/http_client.cpp
     src/core/state_manager.cpp
     src/core/config.cpp
     src/utils/logger.cpp
@@ -56,6 +62,7 @@ target_link_libraries(moostream
     Threads::Threads
     ${NCURSES_LIBRARIES}
     ${MPV_LIBRARIES}
+    ${CURL_LIBRARIES}
     imtui-ncurses
 )
 

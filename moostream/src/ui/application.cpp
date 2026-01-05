@@ -561,26 +561,29 @@ void Application::search_youtube(const std::string& query) {
 void Application::handle_url_input(const std::string& url) {
     Logger::info("Handling URL input: " + url);
 
-    // Extract track info from URL in background
+    // Create a basic track for immediate playback - skip slow metadata extraction
+    Track track;
+    track.url = url;
+    track.title = "Loading... (" + url.substr(url.find_last_of('/') + 1) + ")"; // Use video ID as temp title
+    track.channel = "YouTube";
+    track.duration = 0; // Unknown
+    track.id = url; // Use URL as ID
+
+    // Add to queue and play immediately
+    state_manager_->add_to_queue(track);
+    state_manager_->play_next();
+    play_current_track();
+
+    // Optionally extract metadata in background for UI update (but don't block playback)
     std::thread([this, url]() {
         try {
-            Track track = extractor_->extract_info(url);
-            if (track.is_valid()) {
-                // Ensure the URL is set for playback
-                track.url = url;
-                // Add to queue and play
-                state_manager_->add_to_queue(track);
-                // Play the newly added track
-                state_manager_->play_next();
-                play_current_track();
-            } else {
-                // Fallback: try to play URL directly
-                play_url(url);
+            Track metadata = extractor_->extract_info(url);
+            if (metadata.is_valid()) {
+                // TODO: Update the track in queue with metadata if needed
+                Logger::info("Metadata extracted for: " + metadata.title);
             }
         } catch (const std::exception& e) {
-            Logger::error("Failed to extract URL info: " + std::string(e.what()));
-            // Fallback: try to play URL directly
-            play_url(url);
+            Logger::error("Failed to extract metadata: " + std::string(e.what()));
         }
     }).detach();
 }
