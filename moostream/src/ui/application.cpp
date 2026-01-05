@@ -41,8 +41,8 @@ Application::~Application() {
 
 bool Application::initialize() {
     // Initialize logger
-    Logger::init("/tmp/youtube-tui.log");
-    Logger::info("Initializing YouTube TUI");
+    Logger::init("/tmp/moostream.log");
+    Logger::info("Initializing Moostream");
 
     // Load config
     Config::instance().load();

@@ -17,7 +17,7 @@ Core logic for YouTube TUI player state, configuration, and playlist management.
 | Add playback state | state_manager.h/.cpp | Extend state tracking (shuffle/repeat) |
 
 ## CODE MAP
-Config: Singleton configuration manager with file persistence (~/.config/youtube-tui/config)  
+Config: Singleton configuration manager with file persistence (~/.config/moostream/config)  
 StateManager: Thread-safe queue, playback state, and playlist management with mutex protection  
 Track: YouTube video metadata structure (id, title, channel, duration, etc.)  
 Playlist: User-defined track collections with persistence and timestamps  
@@ -40,4 +40,4 @@ None identified. Clean separation of config vs. state vs. playlist management.
 ## NOTES
 Requires: C++17 standard, filesystem support for config paths  
 Thread-safe design supports concurrent UI updates and audio playback  
-History limited to last 100 tracks, playlists persisted to ~/.config/youtube-tui/playlists.json
+History limited to last 100 tracks, playlists persisted to ~/.config/moostream/playlists.json

@@ -66,4 +66,4 @@ Key classes: Application (ui), StateManager (core), MpvPlayer (audio), Extractor
 - Monolithic UI: All rendering logic in Application::render() instead of modular view classes
 - Placeholder view files without implementation (player_view.*, queue_view.*, search_view.*)
 - UI tightly coupled to business logic (Application handles both rendering and commands)
-<parameter name="filePath">youtube-tui/src/AGENTS.md
+<parameter name="filePath">moostream/src/AGENTS.md

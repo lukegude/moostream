@@ -43,12 +43,12 @@ None identified in utils codebase.
 ## COMMANDS
 ```bash
 # Build with logging
-cd youtube-tui/build && make -j$(nproc)
+cd moostream/build && make -j$(nproc)
 # Check logs
-tail -f /tmp/youtube-tui.log
+tail -f /tmp/moostream.log
 ```
 
 ## NOTES
-Logs to file specified in init(), defaults to /tmp/youtube-tui.log  
+Logs to file specified in init(), defaults to /tmp/moostream.log  
 Thread-safe using std::mutex  
 C++17 standard, no external dependencies

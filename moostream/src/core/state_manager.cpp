@@ -191,7 +191,7 @@ std::string StateManager::get_playlists_path() const {
     if (!home) {
         return "playlists.json";
     }
-    return std::string(home) + "/.config/youtube-tui/playlists.json";
+    return std::string(home) + "/.config/moostream/playlists.json";
 }
 
 void StateManager::load_playlists() {

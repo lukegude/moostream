@@ -50,4 +50,4 @@ None identified in audio codebase.
 
 ## NOTES
 Requires libmpv with yt-dlp support for YouTube streaming. Audio-only playback configured via mpv options. Playback state tracked separately from mpv properties for UI responsiveness.</content>
-<parameter name="filePath">youtube-tui/src/audio/AGENTS.md
+<parameter name="filePath">moostream/src/audio/AGENTS.md

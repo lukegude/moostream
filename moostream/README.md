@@ -1,4 +1,4 @@
-# YouTube TUI
+# Moostream
 
 A terminal-based YouTube audio player built with imtui and libmpv. Stream YouTube videos as audio in your terminal - like a radio!
 
@@ -47,8 +47,8 @@ brew install cmake ncurses mpv yt-dlp pkg-config
 1. Clone the repository with submodules:
 
 ```bash
-git clone --recursive <your-repo-url> youtube-tui
-cd youtube-tui
+git clone --recursive <your-repo-url> moostream
+cd moostream
 ```
 
 2. Add imtui as a git submodule:
@@ -70,7 +70,7 @@ make -j$(nproc)
 4. Run the application:
 
 ```bash
-./youtube-tui
+./moostream
 ```
 
 ## Installation
@@ -81,7 +81,7 @@ After building, you can install system-wide:
 sudo make install
 ```
 
-This installs the binary to `/usr/local/bin/youtube-tui`.
+This installs the binary to `/usr/local/bin/moostream`.
 
 ## Usage
 
@@ -100,7 +100,7 @@ This installs the binary to `/usr/local/bin/youtube-tui`.
 
 ### Configuration
 
-Configuration is stored in `~/.config/youtube-tui/config`:
+Configuration is stored in `~/.config/moostream/config`:
 
 ```
 volume=0.7
@@ -111,12 +111,12 @@ ytdlp_path=yt-dlp
 
 ### Logs
 
-Logs are written to `/tmp/youtube-tui.log` for debugging.
+Logs are written to `/tmp/moostream.log` for debugging.
 
 ## Architecture
 
 ```
-youtube-tui/
+moostream/
 ├── src/
 │   ├── main.cpp              # Entry point
 │   ├── ui/                   # ImTui-based UI layer

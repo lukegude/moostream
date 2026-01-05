@@ -25,9 +25,9 @@ void Config::load_defaults() {
 std::string Config::get_config_path() const {
     const char* home = std::getenv("HOME");
     if (!home) {
-        return ".youtube-tui.conf";
+        return ".moostream.conf";
     }
-    return std::string(home) + "/.config/youtube-tui/config";
+    return std::string(home) + "/.config/moostream/config";
 }
 
 void Config::load(const std::string& config_path) {
@@ -71,7 +71,7 @@ void Config::save() {
         return;
     }
 
-    file << "# YouTube TUI Configuration\n";
+    file << "# Moostream Configuration\n";
     file << "volume=" << volume_ << "\n";
     file << "shuffle=" << (shuffle_ ? "true" : "false") << "\n";
     file << "repeat=" << (repeat_ ? "true" : "false") << "\n";

@@ -2,7 +2,7 @@
 
 set -e
 
-echo "YouTube TUI - Setup Script"
+echo "Moostream - Setup Script"
 echo "=========================="
 echo ""
 
@@ -68,7 +68,7 @@ echo "=========================="
 echo "Build completed successfully!"
 echo ""
 echo "To run the application:"
-echo "  cd build && ./youtube-tui"
+echo "  cd build && ./moostream"
 echo ""
 echo "To install system-wide:"
 echo "  cd build && sudo make install"

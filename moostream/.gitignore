@@ -38,3 +38,5 @@ config
 *~
 *.bak
 .cache
+
+*cookies.txt

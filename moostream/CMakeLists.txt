@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
-project(youtube-tui VERSION 0.1.0 LANGUAGES CXX)
+project(moostream VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -48,10 +48,10 @@ set(SOURCES
 )
 
 # Create executable
-add_executable(youtube-tui ${SOURCES})
+add_executable(moostream ${SOURCES})
 
 # Link libraries
-target_link_libraries(youtube-tui
+target_link_libraries(moostream
     PRIVATE
     Threads::Threads
     ${NCURSES_LIBRARIES}
@@ -61,7 +61,7 @@ target_link_libraries(youtube-tui
 
 # Compiler warnings
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    target_compile_options(youtube-tui PRIVATE
+    target_compile_options(moostream PRIVATE
         -Wall
         -Wextra
         -Wpedantic
@@ -69,4 +69,4 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 # Install target
-install(TARGETS youtube-tui DESTINATION bin)
+install(TARGETS moostream DESTINATION bin)
