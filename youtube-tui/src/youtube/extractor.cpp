@@ -18,6 +18,7 @@ std::string YouTubeExtractor::execute_ytdlp(const std::vector<std::string>& args
     for (const auto& arg : args) {
         command += " " + arg;
     }
+    command += " 2>/dev/null";
 
     std::array<char, 128> buffer;
     std::string result;

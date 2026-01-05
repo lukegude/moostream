@@ -1,5 +1,6 @@
 #include "ui/application.h"
 #include "audio/mpv_player.h"
+#include "player_interface.h"
 #include "core/config.h"
 #include "utils/logger.h"
 
@@ -7,12 +8,15 @@
 #include "imtui/imtui-impl-ncurses.h"
 
 #include <cstring>
+#include <ncurses.h>
+#include <unistd.h>
 #include <algorithm>
 #include <cmath>
 #include <memory>
 #include <string>
 #include <vector>
 #include <future>
+#include <functional>
 
 namespace ytui {
 
@@ -115,9 +119,31 @@ void Application::update() {
 }
 
 void Application::render() {
+    // Ensure ImTui screen is valid before proceeding
+    if (!screen_) {
+        Logger::error("ImTui screen is null, reinitializing...");
+        screen_ = ImTui_ImplNcurses_Init(true);
+        if (!screen_) {
+            Logger::error("Failed to reinitialize ImTui screen");
+            return;
+        }
+    }
+
     ImTui_ImplNcurses_NewFrame();
     ImTui_ImplText_NewFrame();
+
+    // Ensure ImGui context is valid
+    if (!ImGui::GetCurrentContext()) {
+        Logger::error("ImGui context lost, recreating...");
+        ImGui::CreateContext();
+        setup_theme();
+    }
+
     ImGui::NewFrame();
+
+    // Ensure clean state for each render
+    ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize, ImGuiCond_Always);
 
     for (auto it = toasts_.begin(); it != toasts_.end(); ) {
         it->time_remaining -= ImGui::GetIO().DeltaTime;
@@ -129,8 +155,6 @@ void Application::render() {
     }
 
     // Main window with modern styling
-    ImGui::SetNextWindowPos(ImVec2(0, 0));
-    ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
 
     ImGui::Begin("YouTube TUI", nullptr,
                   ImGuiWindowFlags_NoTitleBar |
@@ -150,12 +174,16 @@ void Application::render() {
 
     ImGui::End();
 
-    // Render toast notifications
-    render_toast_notifications();
-
     ImGui::Render();
     ImTui_ImplText_RenderDrawData(ImGui::GetDrawData(), screen_);
     ImTui_ImplNcurses_DrawScreen();
+
+    // Force immediate screen refresh to prevent blank screen during operations
+    refresh();
+    doupdate(); // Ensure ncurses updates the physical screen
+
+    // Small delay to prevent UI freezing during background operations
+    usleep(1000); // 1ms delay
 }
 
 void Application::render_menu_bar() {
@@ -179,12 +207,12 @@ void Application::render_menu_bar() {
 void Application::render_search_view() {
     ImGui::BeginChild("SearchPanel", ImVec2(0, 12), true,
                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-    ImGui::TextColored(ImVec4(0.4f, 0.7f, 1.0f, 1.0f), "🔍 SEARCH YOUTUBE");
+    ImGui::TextColored(ImVec4(0.4f, 0.7f, 1.0f, 1.0f), "[SEARCH] YouTube");
     draw_visual_separator();
 
     ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.15f, 0.18f, 0.25f, 1.0f));
-    if (ImGui::InputText("##search", search_buffer_, sizeof(search_buffer_),
-                          ImGuiInputTextFlags_EnterReturnsTrue)) {
+    bool enter_pressed = ImGui::InputText("##search", search_buffer_, sizeof(search_buffer_), ImGuiInputTextFlags_EnterReturnsTrue);
+    if (enter_pressed) {
         search_youtube(search_buffer_);
         show_toast("Searching YouTube...", 2.0f);
     }
@@ -194,15 +222,17 @@ void Application::render_search_view() {
     if (ImGui::Button("Search") && std::strlen(search_buffer_) > 0) {
         search_youtube(search_buffer_);
         show_toast("Searching YouTube...", 2.0f);
+        // Ensure UI stays responsive after action
+        ImGui::SetWindowFocus(nullptr);
     }
 
     if (incremental_search_active_) {
         ImGui::SameLine();
-        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "⟳ Searching...");
+        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f), "[Searching...]");
     }
 
     if (incremental_search_active_ || !incremental_results_.empty()) {
-        ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "📋 RESULTS (%zu)", incremental_results_.size());
+        ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "Results: (%zu)", incremental_results_.size());
         ImGui::BeginChild("SearchResults", ImVec2(0, 0), true);
 
         std::lock_guard<std::mutex> lock(search_mutex_);
@@ -220,6 +250,8 @@ void Application::render_search_view() {
                     state_manager_->add_to_queue(track);
                     show_toast("Added to queue: " + track.title, 3.0f);
                     Logger::info("Added to queue: " + track.title);
+                    // Ensure UI stays responsive after action
+                    ImGui::SetWindowFocus(nullptr);
                 }
             }
         }
@@ -232,6 +264,8 @@ void Application::render_search_view() {
             const auto& track = incremental_results_[selected_search_result_];
             state_manager_->add_to_queue(track);
             show_toast("Added to queue: " + track.title, 3.0f);
+            // Ensure UI stays responsive after action
+            ImGui::SetWindowFocus(nullptr);
         }
     }
 
@@ -242,7 +276,7 @@ void Application::render_queue_view() {
     ImGui::BeginChild("QueuePanel", ImVec2(0, 15), true);
     const auto& queue = state_manager_->get_queue();
 
-    ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.6f, 1.0f), "🎵 QUEUE (%zu tracks)", queue.size());
+    ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.6f, 1.0f), "Queue: (%zu tracks)", queue.size());
     draw_visual_separator();
 
     if (queue.empty()) {
@@ -255,7 +289,7 @@ void Application::render_queue_view() {
             bool is_current = (i == static_cast<size_t>(state_manager_->get_current_index()));
             bool selected = (i == static_cast<size_t>(selected_queue_item_));
 
-            std::string icon = is_current ? "▶️" : "  ";
+            std::string icon = is_current ? ">" : "  ";
             std::string duration_str = track.duration > 0 ?
                 std::to_string(track.duration / 60) + ":" +
                 (track.duration % 60 < 10 ? "0" : "") + std::to_string(track.duration % 60) : "LIVE";
@@ -288,13 +322,13 @@ void Application::render_queue_view() {
 
 void Application::render_player_view() {
     ImGui::BeginChild("PlayerPanel", ImVec2(0, 0), true);
-    ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1.0f), "🎧 NOW PLAYING");
+    ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1.0f), "Now Playing: NOW PLAYING");
     draw_visual_separator();
 
     const Track* current = state_manager_->get_current_track();
     if (current) {
         ImGui::TextColored(ImVec4(1.0f, 0.9f, 0.6f, 1.0f), "%s", current->title.c_str());
-        ImGui::TextColored(ImVec4(0.7f, 0.8f, 0.9f, 1.0f), "👤 %s", current->channel.c_str());
+        ImGui::TextColored(ImVec4(0.7f, 0.8f, 0.9f, 1.0f), "by %s", current->channel.c_str());
 
         double pos = player_->get_position();
         double dur = player_->get_duration();
@@ -314,7 +348,7 @@ void Application::render_player_view() {
 
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(2, 0));
 
-    if (ImGui::Button("⏮️")) {
+    if (ImGui::Button("[Prev]")) {
         previous_track();
         show_toast("Previous track", 1.5f);
     }
@@ -322,19 +356,19 @@ void Application::render_player_view() {
 
     PlaybackState state = player_->get_state();
     if (state == PlaybackState::Playing) {
-        if (ImGui::Button("⏸️")) {
+        if (ImGui::Button("[Pause]")) {
             player_->pause();
             show_toast("Paused", 1.5f);
         }
     } else {
-        if (ImGui::Button("▶️")) {
+        if (ImGui::Button(">")) {
             player_->play();
             show_toast("Playing", 1.5f);
         }
     }
     ImGui::SameLine();
 
-    if (ImGui::Button("⏭️")) {
+    if (ImGui::Button("[Next]")) {
         next_track();
         show_toast("Next track", 1.5f);
     }
@@ -343,7 +377,7 @@ void Application::render_player_view() {
 
     ImGui::Spacing();
     float volume = static_cast<float>(player_->get_volume());
-    ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "🔊 VOLUME");
+    ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "Volume: VOLUME");
     if (ImGui::SliderFloat("##volume", &volume, 0.0f, 1.0f, "%.0f%%")) {
         player_->set_volume(volume);
         Config::instance().set_volume(volume);
@@ -355,23 +389,23 @@ void Application::render_player_view() {
 void Application::render_status_bar() {
     draw_visual_separator("STATUS");
     PlaybackState state = player_->get_state();
-    const char* state_icon = "⏹️";
+    const char* state_icon = "Stopped";
     const char* state_str = "Stopped";
     ImVec4 state_color = ImVec4(0.6f, 0.6f, 0.7f, 1.0f);
 
     switch (state) {
         case PlaybackState::Playing:
-            state_icon = "▶️";
+            state_icon = ">";
             state_str = "Playing";
             state_color = ImVec4(0.4f, 1.0f, 0.6f, 1.0f);
             break;
         case PlaybackState::Paused:
-            state_icon = "⏸️";
+            state_icon = "[Pause]";
             state_str = "Paused";
             state_color = ImVec4(1.0f, 0.8f, 0.4f, 1.0f);
             break;
         case PlaybackState::Buffering:
-            state_icon = "⏳";
+            state_icon = "Buffering";
             state_str = "Buffering";
             state_color = ImVec4(1.0f, 0.6f, 0.4f, 1.0f);
             break;
@@ -383,16 +417,16 @@ void Application::render_status_bar() {
     ImGui::SameLine();
 
     size_t queue_size = state_manager_->get_queue().size();
-    ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "| 📋 %zu tracks", queue_size);
+    ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "| Results: %zu tracks", queue_size);
 
     if (state_manager_->is_shuffle_enabled()) {
         ImGui::SameLine();
-        ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.8f, 1.0f), "| 🔀 Shuffle ON");
+        ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.8f, 1.0f), "| Shuffle: Shuffle ON");
     }
 
     if (state_manager_->is_repeat_enabled()) {
         ImGui::SameLine();
-        ImGui::TextColored(ImVec4(0.8f, 0.6f, 1.0f, 1.0f), "| 🔁 Repeat ON");
+        ImGui::TextColored(ImVec4(0.8f, 0.6f, 1.0f, 1.0f), "| Repeat: Repeat ON");
     }
 }
 
@@ -499,27 +533,15 @@ void Application::show_toast(const std::string& message, float duration) {
 }
 
 void Application::draw_progress_bar(float fraction, const char* label) {
-    // Custom progress bar with ASCII-style visualization
-    ImGui::ProgressBar(fraction, ImVec2(-1, 20), label);
-
-    // Add ASCII progress indicator below
-    if (fraction > 0.0f) {
-        char progress_ascii[21];
-        int filled = static_cast<int>(fraction * 20.0f);
-        for (int i = 0; i < 20; ++i) {
-            progress_ascii[i] = (i < filled) ? '█' : '░';
-        }
-        progress_ascii[20] = '\0';
-        ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "%s %.0f%%", progress_ascii, fraction * 100.0f);
-    }
+    ImGui::ProgressBar(fraction, ImVec2(-1, 0), label);
 }
 
 void Application::draw_visual_separator(const char* title) {
     if (title) {
-        ImGui::TextColored(ImVec4(0.7f, 0.8f, 1.0f, 1.0f), "═══ %s %s", title,
+        ImGui::TextColored(ImVec4(0.7f, 0.8f, 1.0f, 1.0f), "--- %s %s", title,
                           std::string(50 - strlen(title) - 5, '=').c_str());
     } else {
-        ImGui::TextColored(ImVec4(0.4f, 0.5f, 0.7f, 1.0f), std::string(60, '═').c_str());
+        ImGui::TextColored(ImVec4(0.4f, 0.5f, 0.7f, 1.0f), std::string(60, '-').c_str());
     }
 }
 

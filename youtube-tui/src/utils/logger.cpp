@@ -62,11 +62,6 @@ void Logger::log(LogLevel level, const std::string& message) {
     if (log_file_.is_open()) {
         log_file_ << log_line << std::endl;
     }
-
-    // Also output to stderr for errors
-    if (level == LogLevel::Error) {
-        std::cerr << log_line << std::endl;
-    }
 }
 
 std::string Logger::level_to_string(LogLevel level) {
