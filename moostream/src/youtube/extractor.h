@@ -16,14 +16,14 @@ public:
 
     // Synchronous operations
     Track extract_info(const std::string& url);
-    std::vector<Track> search(const std::string& query, int max_results = 10);
+    std::vector<Track> search(const std::string& query, int max_results = 10, bool live_only = false);
 
     // Asynchronous operations
     std::future<Track> extract_info_async(const std::string& url);
-    std::future<std::vector<Track>> search_async(const std::string& query, int max_results = 10);
+    std::future<std::vector<Track>> search_async(const std::string& query, int max_results = 10, bool live_only = false);
 
     // Streaming search that processes results incrementally
-    void search_streaming(const std::string& query, int max_results,
+    void search_streaming(const std::string& query, int max_results, bool live_only,
                          std::function<void(const Track&)> result_callback);
 
     // Get direct stream URL from video

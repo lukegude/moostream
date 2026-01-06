@@ -5,7 +5,7 @@
 **Branch:** main  
 
 ## OVERVIEW
-C++ source code for terminal-based YouTube audio player using imtui, libmpv, and yt-dlp.
+C++ source code for terminal-based YouTube audio player using imtui and libmpv.
 
 ## STRUCTURE
 ```
@@ -26,7 +26,7 @@ C++ source code for terminal-based YouTube audio player using imtui, libmpv, and
 │   ├── state_manager.cpp # Queue and playback state
 │   └── state_manager.h
 ├── youtube/              # YouTube integration
-│   ├── extractor.cpp     # yt-dlp wrapper for search/extraction
+│   ├── extractor.cpp     # YouTube API integration
 │   └── extractor.h
 ├── audio/                # Audio playback
 │   ├── mpv_player.cpp    # libmpv wrapper
@@ -41,7 +41,7 @@ C++ source code for terminal-based YouTube audio player using imtui, libmpv, and
 |------|----------|-------|
 | Add UI feature | ui/ | Modify imtui views or application logic |
 | Add audio feature | audio/ | Extend MpvPlayer interface |
-| Add YouTube feature | youtube/ | Modify Extractor for new yt-dlp features |
+| Add YouTube feature | youtube/ | Modify Extractor for new YouTube API features |
 | Fix core logic | core/ | Update StateManager or Config |
 | Add utility | utils/ | Extend Logger or add new utilities |
 | Update main loop | main.cpp + ui/application.cpp | Application initialization and event handling |

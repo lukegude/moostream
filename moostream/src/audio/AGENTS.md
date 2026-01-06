@@ -36,7 +36,7 @@ Key methods: load(), play(), pause(), stop(), seek(), set_volume(), get_volume()
 - libmpv C API used directly (no C++ wrapper)  
 - Volume normalized to 0.0-1.0 (converted to mpv's 0-100)  
 - Event-driven updates via update() method  
-- yt-dlp integration via mpv's built-in ytdl option  
+- ytdl integration via mpv's built-in ytdl option  
 - Audio-only playback (video=no, terminal=no)  
 - Error-only logging from mpv (msg-level=all=error)  
 
@@ -49,5 +49,5 @@ None identified in audio codebase.
 - State tracking separate from mpv properties  
 
 ## NOTES
-Requires libmpv with yt-dlp support for YouTube streaming. Audio-only playback configured via mpv options. Playback state tracked separately from mpv properties for UI responsiveness.</content>
+Requires libmpv for YouTube streaming. Audio-only playback configured via mpv options. Playback state tracked separately from mpv properties for UI responsiveness.</content>
 <parameter name="filePath">moostream/src/audio/AGENTS.md

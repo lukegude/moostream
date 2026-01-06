@@ -30,7 +30,7 @@ std::future<Track> YouTubeExtractor::extract_info_async(const std::string& url) 
     });
 }
 
-    std::vector<Track> YouTubeExtractor::search(const std::string& query, int max_results) {
+    std::vector<Track> YouTubeExtractor::search(const std::string& query, int max_results, bool live_only) {
     Logger::info("Starting YouTube API search for: '" + query + "'");
     try {
         std::string access_token = get_access_token();
@@ -43,6 +43,10 @@ std::future<Track> YouTubeExtractor::extract_info_async(const std::string& url) 
         // YouTube Data API v3 search
         std::string api_url = "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=" +
                               std::to_string(max_results) + "&q=" + url_encode(query);
+        if (live_only) {
+            api_url += "&eventType=live";
+            Logger::info("Searching for live videos only");
+        }
 
         Logger::info("YouTube API URL: " + api_url);
         Logger::info("Making YouTube API call with access token");
@@ -62,19 +66,19 @@ std::future<Track> YouTubeExtractor::extract_info_async(const std::string& url) 
     }
 }
 
-std::future<std::vector<Track>> YouTubeExtractor::search_async(const std::string& query, int max_results) {
-    return std::async(std::launch::async, [this, query, max_results]() {
-        return search(query, max_results);
+std::future<std::vector<Track>> YouTubeExtractor::search_async(const std::string& query, int max_results, bool live_only) {
+    return std::async(std::launch::async, [this, query, max_results, live_only]() {
+        return search(query, max_results, live_only);
     });
 }
 
-    void YouTubeExtractor::search_streaming(const std::string& query, int max_results,
+    void YouTubeExtractor::search_streaming(const std::string& query, int max_results, bool live_only,
                                         std::function<void(const Track&)> result_callback) {
-    Logger::info("search_streaming called with query: " + query);
+    Logger::info("search_streaming called with query: " + query + (live_only ? " (live only)" : ""));
     try {
         // Use YouTube API for streaming search
-        std::vector<Track> results = search(query, max_results);
-        Logger::info("search_streaming got " + std::to_string(results.size()) + " results");
+        std::vector<Track> results = search(query, max_results, live_only);
+        Logger::info("search_streaming got " + std::to_string(results.size()) + " API results");
 
         for (const auto& track : results) {
             result_callback(track);
@@ -125,7 +129,7 @@ std::vector<Track> YouTubeExtractor::parse_youtube_api_search_results(const std:
 
                 if (snippet.contains("liveBroadcastContent")) {
                     std::string live_status = snippet["liveBroadcastContent"];
-                    track.is_live = (live_status == "live");
+                    track.is_live = (live_status == "live" || live_status == "upcoming");
                 }
 
                 if (!track.id.empty()) {

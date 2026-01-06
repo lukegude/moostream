@@ -5,7 +5,7 @@
 **Branch:** main  
 
 ## OVERVIEW
-YouTube video search and extraction using yt-dlp. Supports synchronous and asynchronous operations, streaming search results, and Unicode handling.
+YouTube video search using YouTube Data API v3 with OAuth authentication. Stream URL extraction handled by libmpv.
 
 ## WHERE TO LOOK
 | Task | Location | Notes |
@@ -23,7 +23,7 @@ Key class: YouTubeExtractor (extractor.h/.cpp)
 Data structures: Track (include/track.h), Playlist (include/track.h)  
 
 ## CONVENTIONS
-Uses popen() for yt-dlp subprocess execution; string-based JSON parsing for metadata extraction; Unicode escape decoding for titles; cookies file for authentication; std::future for async operations  
+Uses HttpClient for YouTube Data API calls; nlohmann/json for JSON parsing; OAuth 2.0 Device Authorization Grant for authentication; std::future for async operations  
 
 ## ANTI-PATTERNS
-Synchronous subprocess calls may block UI threads; string-based JSON parsing is fragile and incomplete; hardcoded cookies path; no proper error propagation from yt-dlp
+extract_info() and get_stream_url() not implemented (return empty/error); OAuth authentication requires manual user interaction; API rate limits may affect search performance

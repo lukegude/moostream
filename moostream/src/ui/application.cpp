@@ -233,6 +233,10 @@ void Application::render_search_view() {
 
     ImGui::SameLine();
     ImGui::Checkbox("Live", &live_only_);
+    if (live_only_) {
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "(API MODE)");
+    }
 
     ImGui::SameLine();
     if (ImGui::Button("Search") && std::strlen(search_buffer_) > 0) {
@@ -547,13 +551,11 @@ void Application::search_youtube(const std::string& query) {
 
     // Start streaming search in background
     std::thread([this, query]() {
-        extractor_->search_streaming(query, 10, [this](const Track& track) {
+        extractor_->search_streaming(query, 50, live_only_, [this](const Track& track) {
             // This callback will be called for each result as it comes in
             std::lock_guard<std::mutex> lock(search_mutex_);
-            // Filter for live videos if live_only_ is enabled
-            if (!live_only_ || track.is_live) {
-                incremental_results_.push_back(track);
-            }
+            // When live_only is enabled, API already returns only live results
+            incremental_results_.push_back(track);
         });
         // Mark search as complete
         std::lock_guard<std::mutex> lock(search_mutex_);
