@@ -6,6 +6,7 @@
 #include <exception>
 #include <memory>
 #include <string>
+#include <cctype>
 
 void run_auth() {
     std::cout << "Moostream OAuth Setup" << std::endl;
@@ -69,10 +70,56 @@ void run_auth() {
     }
 }
 
+void run_auth_clear() {
+    std::cout << "Moostream OAuth Token Clear" << std::endl;
+    std::cout << "==========================" << std::endl;
+    std::cout << std::endl;
+
+    // Initialize logger
+    ytui::Logger::init("/tmp/moostream.log");
+
+    // Load config
+    ytui::Config::instance().load();
+
+    // Check if we have tokens
+    std::string access_token = ytui::Config::instance().get_youtube_access_token();
+    std::string refresh_token = ytui::Config::instance().get_youtube_refresh_token();
+
+    if (access_token.empty() && refresh_token.empty()) {
+        std::cout << "No authentication tokens found to clear." << std::endl;
+        return;
+    }
+
+    std::cout << "Current authentication status:" << std::endl;
+    std::cout << "Access token: " << (access_token.empty() ? "Not set" : "Set") << std::endl;
+    std::cout << "Refresh token: " << (refresh_token.empty() ? "Not set" : "Set") << std::endl;
+    std::cout << std::endl;
+
+    std::cout << "Are you sure you want to clear all YouTube authentication tokens? (y/N): ";
+    char response;
+    std::cin >> response;
+
+    if (std::tolower(response) == 'y') {
+        ytui::Config::instance().set_youtube_access_token("");
+        ytui::Config::instance().set_youtube_refresh_token("");
+        ytui::Config::instance().set_youtube_token_expiry(0);
+        ytui::Config::instance().save();
+
+        std::cout << "✓ Authentication tokens cleared successfully." << std::endl;
+        std::cout << "You can re-authenticate by running: ./moostream auth" << std::endl;
+    } else {
+        std::cout << "Operation cancelled." << std::endl;
+    }
+}
+
 int main(int argc, char** argv) {
     // Check for auth command
     if (argc >= 2 && std::string(argv[1]) == "auth") {
-        run_auth();
+        if (argc >= 3 && std::string(argv[2]) == "clear") {
+            run_auth_clear();
+        } else {
+            run_auth();
+        }
         return 0;
     }
 

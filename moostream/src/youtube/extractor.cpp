@@ -10,6 +10,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <ctime>
 
 namespace ytui {
 
@@ -256,10 +257,17 @@ bool YouTubeExtractor::authenticate_oauth() {
     std::cout << "Enter this code when prompted: " << user_code << std::endl;
     std::cout << std::endl;
     std::cout << "Complete the authorization in your browser." << std::endl;
-    std::cout << "This program will automatically check for completion every 5 seconds..." << std::endl;
-    std::cout << std::endl;
+    std::cout << "Press Enter when you've authorized the app to start checking for completion..." << std::endl;
 
-    // Step 3: Poll for token
+    // Wait for user to press Enter
+    std::cin.get();
+
+    std::cout << "Press Enter again when you've completed authorization to check for tokens..." << std::endl;
+
+    // Wait for user to press Enter again
+    std::cin.get();
+
+    // Step 3: Check for token once
     std::string token_url = "https://oauth2.googleapis.com/token";
     std::string client_secret = Config::instance().get_youtube_client_secret();
     std::string token_data = "client_id=" + client_id + "&device_code=" + device_code +
@@ -268,63 +276,63 @@ bool YouTubeExtractor::authenticate_oauth() {
         token_data += "&client_secret=" + client_secret;
     }
 
-    for (int i = 0; i < 60; ++i) {  // Poll for up to 5 minutes
-        std::cout << "Checking authorization status... (" << (i + 1) << "/60)" << std::endl;
+    std::cout << "Checking authorization status..." << std::endl;
 
-        std::string token_response = http_client_.post(token_url, token_data);
-        Logger::info("Token polling response: " + token_response);
+    std::string token_response = http_client_.post(token_url, token_data);
+    Logger::info("Token response: " + token_response);
 
-        if (!token_response.empty()) {
-            try {
-                nlohmann::json token_json = nlohmann::json::parse(token_response);
+    if (!token_response.empty()) {
+        try {
+            nlohmann::json token_json = nlohmann::json::parse(token_response);
 
-                if (token_json.contains("access_token")) {
-                    std::string access_token = token_json["access_token"];
-                    std::string refresh_token = token_json.value("refresh_token", "");
+            if (token_json.contains("access_token")) {
+                std::string access_token = token_json["access_token"];
+                std::string refresh_token = token_json.value("refresh_token", "");
 
-                    Config::instance().set_youtube_access_token(access_token);
-                    if (!refresh_token.empty()) {
-                        Config::instance().set_youtube_refresh_token(refresh_token);
-                    }
-                    Config::instance().save();
+                // Parse expiration time
+                int expires_in = token_json.value("expires_in", 3600); // Default 1 hour
+                time_t now = std::time(nullptr);
+                time_t expiry = now + expires_in;
 
-                    std::cout << std::endl << "✓ Authorization successful!" << std::endl;
-                    Logger::info("YouTube OAuth authentication successful");
-                    return true;
-                } else if (token_json.contains("error")) {
-                    std::string error = token_json["error"];
-                    Logger::info("Token polling error: " + error);
-
-                    if (error == "authorization_pending") {
-                        std::cout << "Still waiting for authorization..." << std::endl;
-                    } else if (error == "slow_down") {
-                        std::cout << "Slowing down polling..." << std::endl;
-                        std::this_thread::sleep_for(std::chrono::seconds(10));
-                        continue;
-                    } else if (error == "access_denied") {
-                        std::cout << "Authorization denied by user." << std::endl;
-                        return false;
-                    } else if (error == "invalid_grant") {
-                        std::cout << "Invalid device code or authorization expired." << std::endl;
-                        return false;
-                    } else {
-                        std::cout << "Authorization error: " << error << std::endl;
-                    }
-                } else {
-                    Logger::error("Unexpected token response format");
+                Config::instance().set_youtube_access_token(access_token);
+                if (!refresh_token.empty()) {
+                    Config::instance().set_youtube_refresh_token(refresh_token);
                 }
-            } catch (const std::exception& e) {
-                Logger::error("Failed to parse token response: " + std::string(e.what()));
+                Config::instance().set_youtube_token_expiry(expiry);
+                Config::instance().save();
+
+                std::cout << std::endl << "✓ Authorization successful!" << std::endl;
+                Logger::info("YouTube OAuth authentication successful");
+                return true;
+            } else if (token_json.contains("error")) {
+                std::string error = token_json["error"];
+                Logger::info("Token error: " + error);
+
+                if (error == "authorization_pending") {
+                    std::cout << "Authorization not completed yet. Run the auth command again when ready." << std::endl;
+                    return false;
+                } else if (error == "access_denied") {
+                    std::cout << "Authorization denied by user." << std::endl;
+                    return false;
+                } else if (error == "invalid_grant") {
+                    std::cout << "Invalid device code or authorization expired." << std::endl;
+                    return false;
+                } else {
+                    std::cout << "Authorization error: " << error << std::endl;
+                    return false;
+                }
+            } else {
+                Logger::error("Unexpected token response format");
+                return false;
             }
-        } else {
-            Logger::error("Empty token response from polling");
+        } catch (const std::exception& e) {
+            Logger::error("Failed to parse token response: " + std::string(e.what()));
+            return false;
         }
-
-        std::this_thread::sleep_for(std::chrono::seconds(5));
+    } else {
+        Logger::error("Empty token response");
+        return false;
     }
-
-    Logger::error("YouTube OAuth authentication timed out");
-    return false;
 }
 
 bool YouTubeExtractor::refresh_access_token() {
@@ -352,7 +360,13 @@ bool YouTubeExtractor::refresh_access_token() {
             if (token_json.contains("access_token")) {
                 std::string access_token = token_json["access_token"];
 
+                // Parse expiration time
+                int expires_in = token_json.value("expires_in", 3600); // Default 1 hour
+                time_t now = std::time(nullptr);
+                time_t expiry = now + expires_in;
+
                 Config::instance().set_youtube_access_token(access_token);
+                Config::instance().set_youtube_token_expiry(expiry);
                 Config::instance().save();
 
                 Logger::info("YouTube access token refreshed successfully");
@@ -374,8 +388,22 @@ bool YouTubeExtractor::refresh_access_token() {
     Logger::info(std::string("Checking for access token: ") + (access_token.empty() ? "NOT FOUND" : "FOUND"));
 
     if (!access_token.empty()) {
-        // TODO: Check if token is expired and refresh if needed
-        return access_token;
+        // Check if token is expired and refresh if needed
+        time_t now = std::time(nullptr);
+        time_t expiry = Config::instance().get_youtube_token_expiry();
+
+        if (now >= expiry) {
+            Logger::info("Access token expired, attempting refresh");
+            if (refresh_access_token()) {
+                Logger::info("Token refresh successful");
+                return Config::instance().get_youtube_access_token();
+            } else {
+                Logger::error("Token refresh failed, will re-authenticate");
+                // Fall through to authentication below
+            }
+        } else {
+            return access_token;
+        }
     }
 
     std::string client_id = Config::instance().get_youtube_client_id();

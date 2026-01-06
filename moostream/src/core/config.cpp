@@ -3,6 +3,7 @@
 #include <fstream>
 #include <sstream>
 #include <cstdlib>
+#include <ctime>
 
 namespace ytui {
 
@@ -23,6 +24,7 @@ void Config::load_defaults() {
     youtube_client_secret_ = "";
     youtube_access_token_ = "";
     youtube_refresh_token_ = "";
+    youtube_token_expiry_ = 0;
 }
 
 std::string Config::get_config_path() const {
@@ -67,6 +69,8 @@ void Config::load(const std::string& config_path) {
             youtube_access_token_ = value;
         } else if (key == "youtube_refresh_token") {
             youtube_refresh_token_ = value;
+        } else if (key == "youtube_token_expiry") {
+            youtube_token_expiry_ = std::stoll(value);
         }
     }
 
@@ -88,6 +92,7 @@ void Config::save() {
     file << "youtube_client_secret=" << youtube_client_secret_ << "\n";
     file << "youtube_access_token=" << youtube_access_token_ << "\n";
     file << "youtube_refresh_token=" << youtube_refresh_token_ << "\n";
+    file << "youtube_token_expiry=" << youtube_token_expiry_ << "\n";
 
     Logger::info("Config saved to: " + config_path_);
 }
@@ -120,6 +125,10 @@ void Config::set_youtube_access_token(const std::string& token) {
 
 void Config::set_youtube_refresh_token(const std::string& token) {
     youtube_refresh_token_ = token;
+}
+
+void Config::set_youtube_token_expiry(time_t expiry) {
+    youtube_token_expiry_ = expiry;
 }
 
 } // namespace ytui

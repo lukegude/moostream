@@ -2,6 +2,7 @@
 
 #include <string>
 #include <map>
+#include <ctime>
 
 namespace ytui {
 
@@ -21,6 +22,7 @@ public:
     std::string get_youtube_client_secret() const { return youtube_client_secret_; }
     std::string get_youtube_access_token() const { return youtube_access_token_; }
     std::string get_youtube_refresh_token() const { return youtube_refresh_token_; }
+    time_t get_youtube_token_expiry() const { return youtube_token_expiry_; }
 
     // Setters
     void set_volume(double volume);
@@ -31,6 +33,7 @@ public:
     void set_youtube_client_secret(const std::string& client_secret);
     void set_youtube_access_token(const std::string& token);
     void set_youtube_refresh_token(const std::string& token);
+    void set_youtube_token_expiry(time_t expiry);
 
 private:
     Config();
@@ -50,6 +53,7 @@ private:
     std::string youtube_client_secret_;
     std::string youtube_access_token_;
     std::string youtube_refresh_token_;
+    time_t youtube_token_expiry_;
 };
 
 } // namespace ytui
