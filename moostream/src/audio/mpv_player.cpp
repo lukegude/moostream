@@ -13,7 +13,6 @@ MpvPlayer::MpvPlayer() : mpv_(nullptr), state_(PlaybackState::Stopped) {
 
     // Set options
     mpv_set_option_string(mpv_, "video", "no");  // Audio only
-    mpv_set_option_string(mpv_, "ytdl", "yes");  // Enable youtube-dl/yt-dlp
     mpv_set_option_string(mpv_, "terminal", "no");
     mpv_set_option_string(mpv_, "msg-level", "all=error");
 

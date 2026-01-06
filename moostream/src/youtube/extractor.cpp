@@ -13,49 +13,14 @@
 
 namespace ytui {
 
-YouTubeExtractor::YouTubeExtractor() : ytdlp_path_("yt-dlp") {
-    // TODO: Could add logic to find yt-dlp or youtube-dl in PATH
+YouTubeExtractor::YouTubeExtractor() {
 }
 
-std::string YouTubeExtractor::execute_ytdlp(const std::vector<std::string>& args) {
-    std::string command = ytdlp_path_;
-    for (const auto& arg : args) {
-        command += " " + arg;
-    }
-    command += " 2>/dev/null";
 
-    std::array<char, 128> buffer;
-    std::string result;
-
-    std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(command.c_str(), "r"), pclose);
-    if (!pipe) {
-        throw std::runtime_error("Failed to execute yt-dlp");
-    }
-
-    while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
-        result += buffer.data();
-    }
-
-    return result;
-}
 
 Track YouTubeExtractor::extract_info(const std::string& url) {
-    try {
-        std::vector<std::string> args = {
-            "--dump-json",
-            "--no-playlist",
-            "--quiet",
-            "--js-runtimes", "deno",
-            "--cookies", "../www.youtube.com_cookies.txt",
-            url
-        };
-
-        std::string json_output = execute_ytdlp(args);
-        return parse_track_json(json_output);
-    } catch (const std::exception& e) {
-        Logger::error("Failed to extract info: " + std::string(e.what()));
-        return Track();
-    }
+    Logger::error("extract_info not implemented - YouTube API does not provide stream URLs");
+    return Track();
 }
 
 std::future<Track> YouTubeExtractor::extract_info_async(const std::string& url) {
@@ -69,25 +34,14 @@ std::future<Track> YouTubeExtractor::extract_info_async(const std::string& url) 
     try {
         std::string access_token = get_access_token();
         if (access_token.empty()) {
-            Logger::error("No access token available for YouTube API search, falling back to yt-dlp");
-            // Fallback to yt-dlp search
-            std::string search_query = "ytsearch" + std::to_string(max_results) + ":" + query;
-            std::vector<std::string> args = {
-                "--dump-json",
-                "--quiet",
-                "--no-warnings",
-                "--js-runtimes", "deno",
-                "--cookies", "../www.youtube.com_cookies.txt",
-                search_query
-            };
-            std::string json_output = execute_ytdlp(args);
-            return parse_search_results(json_output);
+            Logger::error("No access token available for YouTube API search");
+            return {};
         }
 
         Logger::info("Using YouTube API for search with access token");
         // YouTube Data API v3 search
         std::string api_url = "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=" +
-                             std::to_string(max_results) + "&q=" + url_encode(query);
+                              std::to_string(max_results) + "&q=" + url_encode(query);
 
         Logger::info("YouTube API URL: " + api_url);
         Logger::info("Making YouTube API call with access token");
@@ -95,37 +49,15 @@ std::future<Track> YouTubeExtractor::extract_info_async(const std::string& url) 
         Logger::info("YouTube API response length: " + std::to_string(response.length()));
 
         if (response.empty()) {
-            Logger::error("Empty response from YouTube Data API, falling back to yt-dlp");
-            // Fallback to yt-dlp
-            std::string search_query = "ytsearch" + std::to_string(max_results) + ":" + query;
-            std::vector<std::string> args = {
-                "--dump-json",
-                "--quiet",
-                "--no-warnings",
-                "--js-runtimes", "deno",
-                "--cookies", "../www.youtube.com_cookies.txt",
-                search_query
-            };
-            std::string json_output = execute_ytdlp(args);
-            return parse_search_results(json_output);
+            Logger::error("Empty response from YouTube Data API");
+            return {};
         }
 
         Logger::info("YouTube API search response received, parsing results");
         return parse_youtube_api_search_results(response);
     } catch (const std::exception& e) {
-        Logger::error("YouTube API search failed: " + std::string(e.what()) + ", falling back to yt-dlp");
-        // Fallback to yt-dlp search
-        std::string search_query = "ytsearch" + std::to_string(max_results) + ":" + query;
-        std::vector<std::string> args = {
-            "--dump-json",
-            "--quiet",
-            "--no-warnings",
-            "--js-runtimes", "deno",
-            "--cookies", "../www.youtube.com_cookies.txt",
-            search_query
-        };
-        std::string json_output = execute_ytdlp(args);
-        return parse_search_results(json_output);
+        Logger::error("YouTube API search failed: " + std::string(e.what()));
+        return {};
     }
 }
 
@@ -152,109 +84,11 @@ std::future<std::vector<Track>> YouTubeExtractor::search_async(const std::string
 }
 
     std::string YouTubeExtractor::get_stream_url(const std::string& video_url) {
-    try {
-        std::vector<std::string> args = {
-            "--get-url",
-            "--format", "bestaudio",
-            "--no-playlist",
-            "--quiet",
-            "--js-runtimes", "deno",
-            "--cookies", "../www.youtube.com_cookies.txt",
-            video_url
-        };
-
-        std::string url = execute_ytdlp(args);
-
-        // Remove trailing newline
-        if (!url.empty() && url.back() == '\n') {
-            url.pop_back();
-        }
-
-        return url;
-    } catch (const std::exception& e) {
-        Logger::error("Failed to get stream URL: " + std::string(e.what()));
-        return "";
-    }
+    Logger::error("get_stream_url not implemented - YouTube API does not provide stream URLs");
+    return "";
 }
 
-Track YouTubeExtractor::parse_track_json(const std::string& json) {
-    Track track;
 
-    // Simple string-based JSON parsing for key fields
-    // This extracts: id, title, uploader, duration, is_live, webpage_url
-
-    // Extract id
-    size_t id_pos = json.find("\"id\":");
-    if (id_pos != std::string::npos) {
-        size_t start = json.find('"', id_pos + 6);
-        size_t end = json.find('"', start + 1);
-        if (start != std::string::npos && end != std::string::npos) {
-            track.id = json.substr(start + 1, end - start - 1);
-        }
-    }
-
-    // Extract title
-    size_t title_pos = json.find("\"title\":");
-    if (title_pos != std::string::npos) {
-        size_t start = json.find('"', title_pos + 9);
-        size_t end = json.find('"', start + 1);
-        if (start != std::string::npos && end != std::string::npos) {
-            std::string title = json.substr(start + 1, end - start - 1);
-             Logger::info("yt-dlp raw title: '" + title + "'");
-             // Decode Unicode escapes
-             std::string decoded_title = decode_unicode_escapes(title);
-             Logger::info("yt-dlp decoded title: '" + decoded_title + "'");
-              track.title = sanitize_title(decoded_title);
-        }
-    }
-
-    // Extract uploader (channel)
-    size_t uploader_pos = json.find("\"uploader\":");
-    if (uploader_pos != std::string::npos) {
-        size_t start = json.find('"', uploader_pos + 12);
-        size_t end = json.find('"', start + 1);
-        if (start != std::string::npos && end != std::string::npos) {
-            track.channel = json.substr(start + 1, end - start - 1);
-        }
-    }
-
-    // Extract duration
-    size_t duration_pos = json.find("\"duration\":");
-    if (duration_pos != std::string::npos) {
-        size_t start = json.find_first_not_of(" \t", duration_pos + 12);
-        size_t end = json.find_first_of(",}", start);
-        if (start != std::string::npos && end != std::string::npos) {
-            try {
-                track.duration = std::stod(json.substr(start, end - start));
-            } catch (const std::exception&) {
-                track.duration = 0;
-            }
-        }
-    }
-
-    // Check if it's live
-    size_t live_pos = json.find("\"is_live\":");
-    if (live_pos != std::string::npos) {
-        size_t start = json.find_first_not_of(" \t", live_pos + 11);
-        size_t end = json.find_first_of(",}", start);
-        if (start != std::string::npos && end != std::string::npos) {
-            std::string live_str = json.substr(start, end - start);
-            track.is_live = (live_str.find("true") != std::string::npos);
-        }
-    }
-
-    // Extract webpage_url as the main URL
-    size_t url_pos = json.find("\"webpage_url\":");
-    if (url_pos != std::string::npos) {
-        size_t start = json.find('"', url_pos + 15);
-        size_t end = json.find('"', start + 1);
-        if (start != std::string::npos && end != std::string::npos) {
-            track.url = json.substr(start + 1, end - start - 1);
-        }
-    }
-
-    return track;
-}
 
 std::vector<Track> YouTubeExtractor::parse_youtube_api_search_results(const std::string& json) {
     std::vector<Track> results;
@@ -309,102 +143,9 @@ std::vector<Track> YouTubeExtractor::parse_youtube_api_search_results(const std:
     return results;
 }
 
-std::vector<Track> YouTubeExtractor::parse_search_results(const std::string& json) {
-    std::vector<Track> results;
 
-    // Split the JSON output by newlines (each line is a separate JSON object)
-    std::istringstream iss(json);
-    std::string line;
 
-    while (std::getline(iss, line)) {
-        if (line.empty()) continue;
 
-        Track track = parse_single_search_result(line);
-        if (!track.id.empty()) {
-            results.push_back(track);
-        }
-    }
-
-    return results;
-}
-
-Track YouTubeExtractor::parse_single_search_result(const std::string& json_line) {
-    Track track;
-
-    // Simple string-based JSON parsing for key fields
-    // This extracts: id, title, uploader, duration, webpage_url
-
-    // Extract id
-    size_t id_pos = json_line.find("\"id\":");
-    if (id_pos != std::string::npos) {
-        size_t start = json_line.find('"', id_pos + 6);
-        size_t end = json_line.find('"', start + 1);
-        if (start != std::string::npos && end != std::string::npos) {
-            track.id = json_line.substr(start + 1, end - start - 1);
-        }
-    }
-
-    // Extract title
-    size_t title_pos = json_line.find("\"title\":");
-    if (title_pos != std::string::npos) {
-        size_t start = json_line.find('"', title_pos + 9);
-        size_t end = json_line.find('"', start + 1);
-        if (start != std::string::npos && end != std::string::npos) {
-            std::string title = json_line.substr(start + 1, end - start - 1);
-             Logger::info("yt-dlp search raw title: '" + title + "'");
-             // Decode Unicode escapes like \u2615\ufe0f
-             std::string decoded_title = decode_unicode_escapes(title);
-             Logger::info("yt-dlp search decoded title: '" + decoded_title + "'");
-              track.title = sanitize_title(decoded_title);
-        }
-    }
-
-    // Extract uploader
-    size_t uploader_pos = json_line.find("\"uploader\":");
-    if (uploader_pos != std::string::npos) {
-        size_t start = json_line.find('"', uploader_pos + 12);
-        size_t end = json_line.find('"', start + 1);
-        if (start != std::string::npos && end != std::string::npos) {
-            track.channel = json_line.substr(start + 1, end - start - 1);
-        }
-    }
-
-    // Extract duration
-    size_t duration_pos = json_line.find("\"duration\":");
-    if (duration_pos != std::string::npos) {
-        size_t start = json_line.find_first_not_of(" \t", duration_pos + 12);
-        size_t end = json_line.find_first_of(",}", start);
-        if (start != std::string::npos && end != std::string::npos) {
-            try {
-                track.duration = std::stod(json_line.substr(start, end - start));
-            } catch (const std::exception&) {
-                track.duration = 0;
-            }
-        }
-    }
-
-    // Extract webpage_url
-    size_t url_pos = json_line.find("\"webpage_url\":");
-    if (url_pos != std::string::npos) {
-        size_t start = json_line.find('"', url_pos + 15);
-        size_t end = json_line.find('"', start + 1);
-        if (start != std::string::npos && end != std::string::npos) {
-            track.url = json_line.substr(start + 1, end - start - 1);
-        }
-    }
-
-    // Extract is_live
-    size_t live_pos = json_line.find("\"is_live\":");
-    if (live_pos != std::string::npos) {
-        size_t start = json_line.find_first_not_of(" \t", live_pos + 10);
-        if (start != std::string::npos) {
-            std::string live_str = json_line.substr(start, 4);
-            track.is_live = (live_str == "true");
-        }
-    }
-
-    return track;
-}
 
 std::string YouTubeExtractor::sanitize_title(const std::string& input) {
     std::string result;

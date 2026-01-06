@@ -5,7 +5,7 @@
 **Branch:** main  
 
 ## OVERVIEW
-C++ terminal-based YouTube audio player using imtui, libmpv, and yt-dlp.  
+C++ terminal-based YouTube audio player using imtui, libmpv, and YouTube Data API v3.  
 
 ## STRUCTURE
 ```
@@ -15,7 +15,7 @@ C++ terminal-based YouTube audio player using imtui, libmpv, and yt-dlp.
 │   │   ├── main.cpp      # Entry point
 │   │   ├── ui/           # UI components (imtui)
 │   │   ├── core/         # Core logic (state, config)
-│   │   ├── youtube/      # YouTube integration (yt-dlp)
+│   │   ├── youtube/      # YouTube integration (YouTube Data API v3)
 │   │   ├── audio/        # Audio playback (libmpv)
 │   │   └── utils/        # Utilities (logger)
 │   ├── include/          # Public headers
@@ -31,7 +31,7 @@ C++ terminal-based YouTube audio player using imtui, libmpv, and yt-dlp.
 |------|----------|-------|
 | Add UI feature | youtube-tui/src/ui/ | Modify imtui-based views |
 | Add audio feature | youtube-tui/src/audio/ | Extend mpv_player |
-| Add YouTube feature | youtube-tui/src/youtube/ | Modify yt-dlp integration |
+| Add YouTube feature | youtube-tui/src/youtube/ | Modify YouTube API integration |
 | Fix core logic | youtube-tui/src/core/ | Update state or config |
 | Add utility | youtube-tui/src/utils/ | Extend logger or add new |
 | Build project | youtube-tui/ | Run make in build dir |
@@ -53,7 +53,7 @@ None identified in main codebase.
 
 ## UNIQUE STYLES
 - Terminal UI with imtui (immediate mode)  
-- Audio streaming via libmpv with yt-dlp  
+- Audio streaming via libmpv  
 - Mixed header organization  
 
 ## COMMANDS
@@ -131,6 +131,6 @@ Terminal UI components using imtui immediate-mode GUI framework with ncurses bac
 - UI-business coupling: Application handles both rendering and commands
 
 ## NOTES
-Requires: CMake >=3.15, C++17 compiler, ncurses, libmpv, yt-dlp
+Requires: CMake >=3.15, C++17 compiler, ncurses, libmpv, curl, nlohmann_json
 Build artifacts in build/ directory
 Logs to /tmp/youtube-tui.log

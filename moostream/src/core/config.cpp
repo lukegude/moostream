@@ -19,7 +19,6 @@ void Config::load_defaults() {
     volume_ = 0.7;
     shuffle_ = false;
     repeat_ = false;
-    ytdlp_path_ = "yt-dlp";
     youtube_client_id_ = "";
     youtube_client_secret_ = "";
     youtube_access_token_ = "";
@@ -60,8 +59,6 @@ void Config::load(const std::string& config_path) {
             shuffle_ = (value == "true" || value == "1");
         } else if (key == "repeat") {
             repeat_ = (value == "true" || value == "1");
-        } else if (key == "ytdlp_path") {
-            ytdlp_path_ = value;
         } else if (key == "youtube_client_id") {
             youtube_client_id_ = value;
         } else if (key == "youtube_client_secret") {
@@ -87,7 +84,6 @@ void Config::save() {
     file << "volume=" << volume_ << "\n";
     file << "shuffle=" << (shuffle_ ? "true" : "false") << "\n";
     file << "repeat=" << (repeat_ ? "true" : "false") << "\n";
-    file << "ytdlp_path=" << ytdlp_path_ << "\n";
     file << "youtube_client_id=" << youtube_client_id_ << "\n";
     file << "youtube_client_secret=" << youtube_client_secret_ << "\n";
     file << "youtube_access_token=" << youtube_access_token_ << "\n";
@@ -108,9 +104,7 @@ void Config::set_repeat(bool repeat) {
     repeat_ = repeat;
 }
 
-void Config::set_ytdlp_path(const std::string& path) {
-    ytdlp_path_ = path;
-}
+
 
 void Config::set_youtube_client_id(const std::string& client_id) {
     youtube_client_id_ = client_id;

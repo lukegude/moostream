@@ -21,7 +21,6 @@ check_dependency() {
 
 check_dependency cmake
 check_dependency pkg-config
-check_dependency yt-dlp
 
 # Check for libraries
 echo ""
@@ -48,6 +47,13 @@ else
     echo "✓ libcurl found"
 fi
 
+if ! pkg-config --exists nlohmann_json; then
+    echo "ERROR: nlohmann_json not found"
+    exit 1
+else
+    echo "✓ nlohmann_json found"
+fi
+
 echo ""
 echo "Creating config directory..."
 mkdir -p ~/.config/moostream
@@ -59,7 +65,6 @@ if [ ! -f ~/.config/moostream/config ]; then
 volume=0.7
 shuffle=false
 repeat=false
-ytdlp_path=yt-dlp
 
 # YouTube OAuth Setup Required:
 # 1. Go to https://console.cloud.google.com/
