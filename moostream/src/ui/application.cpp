@@ -33,7 +33,8 @@ Application::Application()
       incremental_search_active_(false),
       current_focus_(FocusArea::Search),
       vim_mode_enabled_(false),
-      thumbnail_fetch_in_progress_(false) {
+      thumbnail_fetch_in_progress_(false),
+      current_volume_(0.7f) {
     std::memset(search_buffer_, 0, sizeof(search_buffer_));
     std::memset(url_buffer_, 0, sizeof(url_buffer_));
 }
@@ -68,7 +69,8 @@ bool Application::initialize() {
     });
 
     // Initialize volume from config
-    player_->set_volume(Config::instance().get_volume());
+    current_volume_ = static_cast<float>(Config::instance().get_volume());
+    player_->set_volume(current_volume_);
 
     // Initialize ImTui
     IMGUI_CHECKVERSION();
@@ -542,18 +544,27 @@ void Application::render_player_view() {
 
         ImGui::Spacing();
 
-        float vol = static_cast<float>(player_->get_volume());
         char volLabel[32];
-        snprintf(volLabel, sizeof(volLabel), "Vol: %.0f%%", vol * 100.0f);
+        snprintf(volLabel, sizeof(volLabel), "Vol: %.0f%%", current_volume_ * 100.0f);
         
-        float sliderWidth = windowWidth * 0.4f;
-        ImGui::SetCursorPosX((windowWidth - sliderWidth) * 0.5f);
-        ImGui::PushItemWidth(sliderWidth);
-        if (ImGui::SliderFloat("##volume", &vol, 0.0f, 1.0f, volLabel)) {
-            player_->set_volume(vol);
-            Config::instance().set_volume(vol);
+        float volTextWidth = ImGui::CalcTextSize(volLabel).x;
+        float btnWidth = ImGui::CalcTextSize("[-]").x + 8.0f;
+        float totalWidth = btnWidth + 10.0f + volTextWidth + 10.0f + btnWidth;
+        ImGui::SetCursorPosX((windowWidth - totalWidth) * 0.5f);
+        
+        if (ImGui::Button("[-]")) {
+            current_volume_ = std::max(0.0f, current_volume_ - 0.05f);
+            player_->set_volume(current_volume_);
+            Config::instance().set_volume(current_volume_);
         }
-        ImGui::PopItemWidth();
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.9f, 1.0f), "%s", volLabel);
+        ImGui::SameLine();
+        if (ImGui::Button("[+]")) {
+            current_volume_ = std::min(1.0f, current_volume_ + 0.05f);
+            player_->set_volume(current_volume_);
+            Config::instance().set_volume(current_volume_);
+        }
 
     } else {
         std::string msg1 = "No track playing";

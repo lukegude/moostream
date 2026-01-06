@@ -101,6 +101,9 @@ private:
     bool thumbnail_fetch_in_progress_;
     std::mutex thumbnail_mutex_;
 
+    // Volume control - cached locally to avoid mpv read issues
+    float current_volume_;
+
     void fetch_thumbnail_async(const std::string& track_id, const std::string& thumbnail_url);
 };
 

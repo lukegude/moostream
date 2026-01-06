@@ -382,6 +382,14 @@ bool YouTubeExtractor::refresh_access_token() {
 
                 Config::instance().set_youtube_access_token(access_token);
                 Config::instance().set_youtube_token_expiry(expiry);
+
+                // Handle refresh token rotation - Google may return a new refresh token
+                if (token_json.contains("refresh_token")) {
+                    std::string new_refresh_token = token_json["refresh_token"];
+                    Config::instance().set_youtube_refresh_token(new_refresh_token);
+                    Logger::info("Refresh token rotated by Google, saved new token");
+                }
+
                 Config::instance().save();
 
                 Logger::info("YouTube access token refreshed successfully");
