@@ -51,6 +51,8 @@ set(SOURCES
     src/core/state_manager.cpp
     src/core/config.cpp
     src/utils/logger.cpp
+    src/utils/image_utils.cpp
+    src/utils/stb_image.cpp
 )
 
 # Create executable

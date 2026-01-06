@@ -3,10 +3,12 @@
 #include "player_interface.h"
 #include "youtube/extractor.h"
 #include "core/state_manager.h"
+#include "image_utils.h"
 #include <memory>
 #include <string>
 #include <mutex>
 #include <thread>
+#include <unordered_map>
 
 namespace ImTui {
 struct TScreen;
@@ -92,6 +94,14 @@ private:
     std::vector<Track> incremental_results_;
     bool incremental_search_active_;
     std::mutex search_mutex_;
+
+    std::unordered_map<std::string, ColoredAsciiArt> thumbnail_cache_;
+    ColoredAsciiArt current_colored_art_;
+    std::string last_fetched_track_id_;
+    bool thumbnail_fetch_in_progress_;
+    std::mutex thumbnail_mutex_;
+
+    void fetch_thumbnail_async(const std::string& track_id, const std::string& thumbnail_url);
 };
 
 } // namespace ytui

@@ -132,6 +132,17 @@ std::vector<Track> YouTubeExtractor::parse_youtube_api_search_results(const std:
                     track.is_live = (live_status == "live" || live_status == "upcoming");
                 }
 
+                if (snippet.contains("thumbnails")) {
+                    const auto& thumbnails = snippet["thumbnails"];
+                    if (thumbnails.contains("medium") && thumbnails["medium"].contains("url")) {
+                        track.thumbnail_url = thumbnails["medium"]["url"];
+                    } else if (thumbnails.contains("default") && thumbnails["default"].contains("url")) {
+                        track.thumbnail_url = thumbnails["default"]["url"];
+                    } else if (thumbnails.contains("high") && thumbnails["high"].contains("url")) {
+                        track.thumbnail_url = thumbnails["high"]["url"];
+                    }
+                }
+
                 if (!track.id.empty()) {
                     track.url = "https://www.youtube.com/watch?v=" + track.id;
                 }

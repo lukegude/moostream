@@ -3,6 +3,7 @@
 #include "player_interface.h"
 #include "core/config.h"
 #include "utils/logger.h"
+#include "image_utils.h"
 
 #include "imtui/imtui.h"
 #include "imtui/imtui-impl-ncurses.h"
@@ -31,7 +32,8 @@ Application::Application()
       search_in_progress_(false),
       incremental_search_active_(false),
       current_focus_(FocusArea::Search),
-      vim_mode_enabled_(false) {
+      vim_mode_enabled_(false),
+      thumbnail_fetch_in_progress_(false) {
     std::memset(search_buffer_, 0, sizeof(search_buffer_));
     std::memset(url_buffer_, 0, sizeof(url_buffer_));
 }
@@ -428,69 +430,146 @@ void Application::render_playlists_tab() {
 
 void Application::render_player_view() {
     ImGui::BeginChild("PlayerPanel", ImVec2(0, 0), true);
-    ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1.0f), "Now Playing: NOW PLAYING");
+
+    float windowWidth = ImGui::GetWindowWidth();
+    const char* headerText = "NOW PLAYING";
+    float headerWidth = ImGui::CalcTextSize(headerText).x;
+    ImGui::SetCursorPosX((windowWidth - headerWidth) * 0.5f);
+    ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1.0f), "%s", headerText);
+    
     draw_visual_separator();
 
     const Track* current = state_manager_->get_current_track();
     if (current) {
+        if (current->id != last_fetched_track_id_ && !current->thumbnail_url.empty()) {
+            fetch_thumbnail_async(current->id, current->thumbnail_url);
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(thumbnail_mutex_);
+            float artPixelWidth = 56.0f * ImGui::CalcTextSize(" ").x;
+            float artStartX = (windowWidth - artPixelWidth) * 0.5f;
+            if (artStartX < 0.0f) artStartX = 0.0f;
+
+            if (!current_colored_art_.empty()) {
+                for (const auto& row : current_colored_art_.rows) {
+                    ImGui::SetCursorPosX(artStartX);
+                    for (size_t i = 0; i < row.size(); ++i) {
+                        const auto& cc = row[i];
+                        if (i > 0) ImGui::SameLine(0, 0);
+                        char buf[2] = {cc.ch, '\0'};
+                        ImGui::TextColored(ImVec4(cc.r, cc.g, cc.b, 1.0f), "%s", buf);
+                    }
+                }
+            } else {
+                for (int i = 0; i < 16; ++i) {
+                    ImGui::SetCursorPosX(artStartX);
+                    if (i == 0 || i == 15) {
+                        ImGui::TextColored(ImVec4(0.3f, 0.3f, 0.4f, 1.0f), "+------------------------------------------------------+");
+                    } else if (i == 7) {
+                        ImGui::TextColored(ImVec4(0.3f, 0.3f, 0.4f, 1.0f), "|                      Loading...                      |");
+                    } else {
+                        ImGui::TextColored(ImVec4(0.3f, 0.3f, 0.4f, 1.0f), "|                                                      |");
+                    }
+                }
+            }
+        }
+
+        ImGui::Spacing();
+        ImGui::Spacing();
+
+        float titleWidth = ImGui::CalcTextSize(current->title.c_str()).x;
+        ImGui::SetCursorPosX((windowWidth - titleWidth) * 0.5f);
         ImGui::TextColored(ImVec4(1.0f, 0.9f, 0.6f, 1.0f), "%s", current->title.c_str());
-        ImGui::TextColored(ImVec4(0.7f, 0.8f, 0.9f, 1.0f), "by %s", current->channel.c_str());
+
+        std::string artistStr = "by " + current->channel;
+        float artistWidth = ImGui::CalcTextSize(artistStr.c_str()).x;
+        ImGui::SetCursorPosX((windowWidth - artistWidth) * 0.5f);
+        ImGui::TextColored(ImVec4(0.7f, 0.8f, 0.9f, 1.0f), "%s", artistStr.c_str());
+
+        ImGui::Spacing();
 
         double pos = player_->get_position();
         double dur = player_->get_duration();
-
         float progress = dur > 0 ? static_cast<float>(pos / dur) : 0.0f;
-        draw_progress_bar(progress);
 
-        ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.9f, 1.0f), "%.0f:%.0f / %.0f:%.0f",
+        float barWidth = windowWidth * 0.8f;
+        ImGui::SetCursorPosX((windowWidth - barWidth) * 0.5f);
+        ImGui::PushItemWidth(barWidth);
+        draw_progress_bar(progress);
+        ImGui::PopItemWidth();
+
+        char timeBuf[64];
+        snprintf(timeBuf, sizeof(timeBuf), "%.0f:%.0f / %.0f:%.0f",
                    std::floor(pos / 60), std::fmod(pos, 60),
                    std::floor(dur / 60), std::fmod(dur, 60));
-    } else {
-        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "No track playing");
-        ImGui::TextColored(ImVec4(0.4f, 0.4f, 0.5f, 1.0f), "Search and add tracks to get started!");
-    }
+        float timeWidth = ImGui::CalcTextSize(timeBuf).x;
+        ImGui::SetCursorPosX((windowWidth - timeWidth) * 0.5f);
+        ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.7f, 1.0f), "%s", timeBuf);
 
-    ImGui::Spacing();
+        ImGui::Spacing();
 
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(2, 0));
+        const char* prevLabel = "[Prev]";
+        const char* nextLabel = "[Next]";
+        const char* playLabel = (player_->get_state() == PlaybackState::Playing) ? "[Pause]" : " [Play] ";
 
-    if (ImGui::Button("[Prev]")) {
-        previous_track();
-        show_toast("Previous track", 1.5f);
-    }
-    ImGui::SameLine();
-
-    PlaybackState state = player_->get_state();
-    if (state == PlaybackState::Playing) {
-        if (ImGui::Button("[Pause]")) {
-            player_->pause();
-            show_toast("Paused", 1.5f);
+        float btnSpacing = ImGui::GetStyle().ItemSpacing.x;
+        float controlsWidth = ImGui::CalcTextSize(prevLabel).x + ImGui::CalcTextSize(nextLabel).x + ImGui::CalcTextSize(playLabel).x + (btnSpacing * 2) + 20.0f;
+        
+        ImGui::SetCursorPosX((windowWidth - controlsWidth) * 0.5f);
+        
+        if (ImGui::Button(prevLabel)) {
+            previous_track();
+            show_toast("Previous track", 1.5f);
         }
-    } else {
-        if (ImGui::Button(">")) {
-            player_->play();
-            show_toast("Playing", 1.5f);
+        ImGui::SameLine();
+        
+        if (ImGui::Button(playLabel)) {
+             if (player_->get_state() == PlaybackState::Playing) {
+                player_->pause();
+                show_toast("Paused", 1.5f);
+            } else {
+                player_->play();
+                show_toast("Playing", 1.5f);
+            }
         }
-    }
-    ImGui::SameLine();
+        ImGui::SameLine();
 
-    if (ImGui::Button("[Next]")) {
-        next_track();
-        show_toast("Next track", 1.5f);
-    }
+        if (ImGui::Button(nextLabel)) {
+            next_track();
+            show_toast("Next track", 1.5f);
+        }
 
-    ImGui::PopStyleVar();
+        ImGui::Spacing();
 
-    ImGui::Spacing();
-    float volume = static_cast<float>(player_->get_volume());
-    ImGui::TextColored(ImVec4(0.6f, 0.8f, 1.0f, 1.0f), "Volume: VOLUME");
-    if (ImGui::SliderFloat("##volume", &volume, 0.0f, 1.0f, "%.0f%%")) {
-        player_->set_volume(volume);
-        Config::instance().set_volume(volume);
+        float vol = static_cast<float>(player_->get_volume());
+        char volLabel[32];
+        snprintf(volLabel, sizeof(volLabel), "Vol: %.0f%%", vol * 100.0f);
+        
+        float sliderWidth = windowWidth * 0.4f;
+        ImGui::SetCursorPosX((windowWidth - sliderWidth) * 0.5f);
+        ImGui::PushItemWidth(sliderWidth);
+        if (ImGui::SliderFloat("##volume", &vol, 0.0f, 1.0f, volLabel)) {
+            player_->set_volume(vol);
+            Config::instance().set_volume(vol);
+        }
+        ImGui::PopItemWidth();
+
+    } else {
+        std::string msg1 = "No track playing";
+        float w1 = ImGui::CalcTextSize(msg1.c_str()).x;
+        ImGui::SetCursorPosX((windowWidth - w1) * 0.5f);
+        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "%s", msg1.c_str());
+        
+        std::string msg2 = "Search and add tracks to get started!";
+        float w2 = ImGui::CalcTextSize(msg2.c_str()).x;
+        ImGui::SetCursorPosX((windowWidth - w2) * 0.5f);
+        ImGui::TextColored(ImVec4(0.4f, 0.4f, 0.5f, 1.0f), "%s", msg2.c_str());
     }
 
     ImGui::EndChild();
 }
+
 
 void Application::render_status_bar() {
     draw_visual_separator("STATUS");
@@ -680,6 +759,47 @@ void Application::draw_visual_separator(const char* title) {
     } else {
         ImGui::TextColored(ImVec4(0.4f, 0.5f, 0.7f, 1.0f), std::string(60, '-').c_str());
     }
+}
+
+void Application::fetch_thumbnail_async(const std::string& track_id, const std::string& thumbnail_url) {
+    if (thumbnail_fetch_in_progress_) return;
+    
+    Logger::info("Fetching thumbnail for track: " + track_id + " from: " + thumbnail_url);
+    last_fetched_track_id_ = track_id;
+    
+    {
+        std::lock_guard<std::mutex> lock(thumbnail_mutex_);
+        auto it = thumbnail_cache_.find(track_id);
+        if (it != thumbnail_cache_.end()) {
+            current_colored_art_ = it->second;
+            Logger::info("Using cached thumbnail for: " + track_id);
+            return;
+        }
+    }
+    
+    thumbnail_fetch_in_progress_ = true;
+    current_colored_art_ = ColoredAsciiArt();
+    
+    std::thread([this, track_id, thumbnail_url]() {
+        std::vector<unsigned char> image_data = download_image(thumbnail_url);
+        Logger::info("Downloaded image data: " + std::to_string(image_data.size()) + " bytes");
+        ColoredAsciiArt colored_art;
+        
+        if (!image_data.empty()) {
+            colored_art = image_to_colored_ascii(image_data, 56, 16);
+            Logger::info("Generated colored ASCII art");
+        }
+        
+        {
+            std::lock_guard<std::mutex> lock(thumbnail_mutex_);
+            thumbnail_cache_[track_id] = colored_art;
+            if (last_fetched_track_id_ == track_id) {
+                current_colored_art_ = colored_art;
+            }
+        }
+        
+        thumbnail_fetch_in_progress_ = false;
+    }).detach();
 }
 
 void Application::render_toast_notifications() {
