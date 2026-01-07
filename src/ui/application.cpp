@@ -29,10 +29,10 @@ Application::Application()
       show_search_(true),
       live_only_(false),
       running_(false),
-      search_in_progress_(false),
-      incremental_search_active_(false),
       current_focus_(FocusArea::Search),
       vim_mode_enabled_(false),
+      search_in_progress_(false),
+      incremental_search_active_(false),
       thumbnail_fetch_in_progress_(false),
       current_volume_(0.7f) {
     std::memset(search_buffer_, 0, sizeof(search_buffer_));
@@ -768,7 +768,7 @@ void Application::draw_visual_separator(const char* title) {
         ImGui::TextColored(ImVec4(0.7f, 0.8f, 1.0f, 1.0f), "--- %s %s", title,
                           std::string(50 - strlen(title) - 5, '=').c_str());
     } else {
-        ImGui::TextColored(ImVec4(0.4f, 0.5f, 0.7f, 1.0f), std::string(60, '-').c_str());
+        ImGui::TextColored(ImVec4(0.4f, 0.5f, 0.7f, 1.0f), "%s", std::string(60, '-').c_str());
     }
 }
 
