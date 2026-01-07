@@ -5,12 +5,13 @@ A terminal-based YouTube audio player built with imtui and libmpv. Stream YouTub
 ## Features
 
 - Play YouTube videos (audio only)
-- Search YouTube directly from the terminal
+- Search YouTube directly from the terminal (via YouTube Data API v3)
 - Queue management (add, remove, reorder)
 - Playback controls (play, pause, stop, next, previous)
 - Volume control
 - Shuffle and repeat modes
 - Persistent configuration
+- OAuth 2.0 authentication for YouTube API
 - Support for both regular videos and livestreams
 
 ## Dependencies
@@ -22,28 +23,38 @@ A terminal-based YouTube audio player built with imtui and libmpv. Stream YouTub
 - ncurses
 - libmpv
 - curl (for YouTube API requests)
-- yt-dlp (for YouTube stream extraction)
+- nlohmann_json
 
 ### Ubuntu/Debian
 
 ```bash
 sudo apt update
-sudo apt install build-essential cmake libncurses-dev libmpv-dev libcurl4-openssl-dev yt-dlp pkg-config
+sudo apt install build-essential cmake libncurses-dev libmpv-dev libcurl4-openssl-dev nlohmann-json3-dev pkg-config
 ```
 
 ### Arch Linux
 
 ```bash
-sudo pacman -S base-devel cmake ncurses mpv yt-dlp
+sudo pacman -S base-devel cmake ncurses mpv nlohmann-json
 ```
 
 ### macOS
 
 ```bash
-brew install cmake ncurses mpv yt-dlp pkg-config
+brew install cmake ncurses mpv nlohmann-json pkg-config
 ```
 
 ## Building
+
+### Quick Start (Recommended)
+
+```bash
+git clone --recursive <your-repo-url> moostream
+cd moostream
+./install.sh  # Install deps, build, and install system-wide (macOS, Debian/Ubuntu, Arch, Fedora, openSUSE)
+```
+
+### Manual Build
 
 1. Clone the repository with submodules:
 
@@ -52,10 +63,9 @@ git clone --recursive <your-repo-url> moostream
 cd moostream
 ```
 
-2. Add imtui as a git submodule:
+2. Initialize submodules (if not cloned with --recursive):
 
 ```bash
-git submodule add https://github.com/ggerganov/imtui.git external/imtui
 git submodule update --init --recursive
 ```
 
@@ -85,12 +95,14 @@ This will display a URL and code. Complete the authorization in your browser, an
 
 - `moostream` - Run the main application
 - `moostream auth` - Set up YouTube OAuth authentication
+- `moostream auth clear` - Clear stored authentication tokens
 
 ## Installation
 
 After building, you can install system-wide:
 
 ```bash
+cd build
 sudo make install
 ```
 
@@ -119,7 +131,6 @@ Configuration is stored in `~/.config/moostream/config`:
 volume=0.7
 shuffle=false
 repeat=false
-ytdlp_path=yt-dlp
 youtube_client_id=YOUR_OAUTH_CLIENT_ID_HERE
 youtube_access_token=auto_generated
 youtube_refresh_token=auto_generated
@@ -136,7 +147,7 @@ To use the YouTube search functionality, you need OAuth 2.0 credentials:
 5. Create OAuth 2.0 credentials (Client ID) - choose "TVs and Limited Input devices"
 6. The JSON file contains your `client_id` and `client_secret`
 7. Add both `client_id` and `client_secret` to your config file as `youtube_client_id` and `youtube_client_secret`
-8. On first run, the application will guide you through OAuth authentication
+8. Run `./moostream auth` to complete the OAuth flow
 
 **Troubleshooting:**
 - Make sure YouTube Data API v3 is enabled in your project
@@ -155,32 +166,47 @@ Logs are written to `/tmp/moostream.log` for debugging.
 ```
 moostream/
 ├── src/
-│   ├── main.cpp              # Entry point
-│   ├── ui/                   # ImTui-based UI layer
-│   │   └── application.cpp   # Main application logic
-│   ├── audio/                # Audio playback
-│   │   └── mpv_player.cpp    # libmpv wrapper
-│   ├── youtube/              # YouTube integration
-│   │   └── extractor.cpp     # yt-dlp wrapper
-│   ├── core/                 # Core functionality
-│   │   ├── state_manager.cpp # Queue/playback state
-│   │   └── config.cpp        # Configuration
-│   └── utils/                # Utilities
-│       └── logger.cpp        # Logging
-└── external/
-    └── imtui/                # imtui library (submodule)
+│   ├── main.cpp                # Entry point, CLI handling
+│   ├── ui/                     # ImTui-based UI layer
+│   │   ├── application.cpp/h   # Main application logic
+│   │   ├── player_view.cpp/h   # Player controls view
+│   │   ├── queue_view.cpp/h    # Queue management view
+│   │   └── search_view.cpp/h   # YouTube search view
+│   ├── audio/                  # Audio playback
+│   │   └── mpv_player.cpp/h    # libmpv wrapper
+│   ├── youtube/                # YouTube integration
+│   │   ├── extractor.cpp/h     # YouTube Data API v3 integration
+│   │   └── http_client.cpp/h   # HTTP client for API requests
+│   ├── core/                   # Core functionality
+│   │   ├── state_manager.cpp/h # Queue/playback state
+│   │   └── config.cpp/h        # Configuration
+│   └── utils/                  # Utilities
+│       ├── logger.cpp/h        # Logging
+│       ├── image_utils.cpp     # Image processing utilities
+│       └── stb_image.cpp       # stb_image library
+├── include/                    # Public headers
+│   ├── track.h                 # Track/Playlist data structures
+│   ├── player_interface.h      # IPlayer interface
+│   ├── image_utils.h           # Image utilities header
+│   └── stb_image.h             # stb_image header
+├── external/                   # Git submodules
+│   ├── imtui/                  # imtui library
+│   └── nlohmann_json/          # JSON library
+├── test/                       # Test files
+├── CMakeLists.txt              # Build configuration
+├── setup.sh                    # Setup and build script
+└── README.md
 ```
 
 ## How It Works
 
-1. **YouTube Integration**: Uses yt-dlp to search and extract stream URLs
-2. **Audio Playback**: libmpv handles streaming and playback with built-in yt-dlp support
+1. **YouTube Integration**: Uses YouTube Data API v3 with OAuth 2.0 for search; libmpv's built-in yt-dlp support for stream extraction
+2. **Audio Playback**: libmpv handles streaming and playback
 3. **UI**: imtui provides an immediate-mode GUI in the terminal using ncurses
 4. **State Management**: Centralized state manager handles queue and playback logic
 
 ## TODO/Future Features
 
-- [ ] JSON parsing for proper YouTube metadata (currently placeholder)
 - [ ] Playlist support (save/load playlists)
 - [ ] Visualizer (ASCII spectrum analyzer)
 - [ ] History view
@@ -200,15 +226,6 @@ Make sure libmpv is properly installed:
 pkg-config --modversion mpv
 ```
 
-### "Failed to execute yt-dlp"
-
-Ensure yt-dlp is in your PATH:
-
-```bash
-which yt-dlp
-yt-dlp --version
-```
-
 ### Build errors with imtui
 
 Make sure you've initialized the submodules:
@@ -217,14 +234,22 @@ Make sure you've initialized the submodules:
 git submodule update --init --recursive
 ```
 
+### Authentication issues
+
+Clear tokens and re-authenticate:
+
+```bash
+./moostream auth clear
+./moostream auth
+```
+
 ## Contributing
 
 Contributions are welcome! Areas that need work:
 
-1. JSON parsing implementation for YouTube metadata
-2. UI improvements and additional views
-3. Better error handling
-4. Testing
+1. UI improvements and additional views
+2. Better error handling
+3. Testing
 
 ## License
 
@@ -234,4 +259,4 @@ Contributions are welcome! Areas that need work:
 
 - [imtui](https://github.com/ggerganov/imtui) - Immediate mode TUI library
 - [libmpv](https://mpv.io/) - Media player library
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) - YouTube downloader
+- [nlohmann/json](https://github.com/nlohmann/json) - JSON for Modern C++
