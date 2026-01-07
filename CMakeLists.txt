@@ -8,6 +8,22 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Options
 option(BUILD_TESTS "Build tests" OFF)
 
+# macOS: Set up Homebrew paths for ncurses before finding packages
+if(APPLE)
+    execute_process(
+        COMMAND brew --prefix
+        OUTPUT_VARIABLE HOMEBREW_PREFIX
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(HOMEBREW_PREFIX)
+        set(ENV{PKG_CONFIG_PATH} "${HOMEBREW_PREFIX}/opt/ncurses/lib/pkgconfig:${HOMEBREW_PREFIX}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+        set(CMAKE_PREFIX_PATH "${HOMEBREW_PREFIX}/opt/ncurses;${HOMEBREW_PREFIX};${CMAKE_PREFIX_PATH}")
+        list(APPEND CMAKE_LIBRARY_PATH "${HOMEBREW_PREFIX}/opt/ncurses/lib")
+        list(APPEND CMAKE_INCLUDE_PATH "${HOMEBREW_PREFIX}/opt/ncurses/include")
+    endif()
+endif()
+
 # Find required packages
 find_package(Threads REQUIRED)
 find_package(PkgConfig REQUIRED)
@@ -23,6 +39,12 @@ pkg_check_modules(CURL REQUIRED libcurl)
 
 # Add imtui as subdirectory
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/imtui/CMakeLists.txt")
+    # Help imtui find ncurses on macOS
+    if(APPLE AND HOMEBREW_PREFIX)
+        set(CURSES_INCLUDE_PATH "${HOMEBREW_PREFIX}/opt/ncurses/include")
+        set(CURSES_LIBRARY "${HOMEBREW_PREFIX}/opt/ncurses/lib/libncurses.dylib")
+        set(CURSES_NCURSES_LIBRARY "${HOMEBREW_PREFIX}/opt/ncurses/lib/libncurses.dylib")
+    endif()
     add_subdirectory(external/imtui)
 else()
     message(WARNING "imtui not found in external/imtui. Please run: git submodule update --init --recursive")
@@ -57,6 +79,11 @@ set(SOURCES
 
 # Create executable
 add_executable(moostream ${SOURCES})
+
+# macOS: Add Homebrew library path
+if(APPLE AND HOMEBREW_PREFIX)
+    target_link_directories(moostream PRIVATE "${HOMEBREW_PREFIX}/opt/ncurses/lib" "${HOMEBREW_PREFIX}/lib")
+endif()
 
 # Link libraries
 target_link_libraries(moostream
