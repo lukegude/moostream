@@ -6,8 +6,25 @@ echo "Moostream - Setup Script"
 echo "=========================="
 echo ""
 
-# Check for required dependencies
-echo "Checking dependencies..."
+get_cpu_count() {
+    if command -v nproc &> /dev/null; then
+        nproc
+    elif command -v sysctl &> /dev/null; then
+        sysctl -n hw.ncpu
+    else
+        echo 4
+    fi
+}
+
+setup_macos_paths() {
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        HOMEBREW_PREFIX=$(brew --prefix 2>/dev/null || echo "/opt/homebrew")
+        export PKG_CONFIG_PATH="$HOMEBREW_PREFIX/lib/pkgconfig:$HOMEBREW_PREFIX/opt/ncurses/lib/pkgconfig:$PKG_CONFIG_PATH"
+        export LDFLAGS="-L$HOMEBREW_PREFIX/lib $LDFLAGS"
+        export CPPFLAGS="-I$HOMEBREW_PREFIX/include $CPPFLAGS"
+        echo "✓ Configured Homebrew paths"
+    fi
+}
 
 check_dependency() {
     if ! command -v "$1" &> /dev/null; then
@@ -19,6 +36,9 @@ check_dependency() {
     fi
 }
 
+setup_macos_paths
+
+echo "Checking dependencies..."
 check_dependency cmake
 check_dependency pkg-config
 
@@ -101,7 +121,7 @@ cmake ..
 
 echo ""
 echo "Building project..."
-make -j$(nproc)
+make -j$(get_cpu_count)
 
 echo ""
 echo "=========================="

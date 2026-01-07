@@ -50,7 +50,6 @@ echo ""
 install_macos() {
     echo "Installing dependencies for macOS..."
     
-    # Check for Homebrew
     if ! command -v brew &> /dev/null; then
         echo "Homebrew not found."
         exit 0
