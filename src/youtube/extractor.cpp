@@ -355,6 +355,8 @@ bool YouTubeExtractor::refresh_access_token() {
     std::string client_id = Config::instance().get_youtube_client_id();
 
     if (refresh_token.empty() || client_id.empty()) {
+        Logger::error("Cannot refresh: refresh_token empty=" + std::to_string(refresh_token.empty()) + 
+                      ", client_id empty=" + std::to_string(client_id.empty()));
         return false;
     }
 
@@ -366,9 +368,12 @@ bool YouTubeExtractor::refresh_access_token() {
         token_data += "&client_secret=" + client_secret;
     }
 
+    Logger::info("Attempting token refresh...");
     std::string token_response = http_client_.post(token_url, token_data);
+    Logger::info("Token refresh response length: " + std::to_string(token_response.length()));
 
     if (!token_response.empty()) {
+        Logger::info("Token refresh raw response: " + token_response.substr(0, 200));
         try {
             nlohmann::json token_json = nlohmann::json::parse(token_response);
 
@@ -411,18 +416,20 @@ bool YouTubeExtractor::refresh_access_token() {
     Logger::info(std::string("Checking for access token: ") + (access_token.empty() ? "NOT FOUND" : "FOUND"));
 
     if (!access_token.empty()) {
-        // Check if token is expired and refresh if needed
         time_t now = std::time(nullptr);
         time_t expiry = Config::instance().get_youtube_token_expiry();
 
-        if (now >= expiry) {
-            Logger::info("Access token expired, attempting refresh");
+        Logger::info("Token expiry check: now=" + std::to_string(now) + ", expiry=" + std::to_string(expiry) + 
+                     ", expired=" + std::to_string(now >= expiry));
+
+        if (now >= expiry - 300) {  // Refresh 5 minutes before expiry
+            Logger::info("Access token expired or expiring soon, attempting refresh");
             if (refresh_access_token()) {
                 Logger::info("Token refresh successful");
                 return Config::instance().get_youtube_access_token();
             } else {
-                Logger::error("Token refresh failed, will re-authenticate");
-                // Fall through to authentication below
+                Logger::error("Token refresh failed - returning empty (re-run 'moostream auth' to re-authenticate)");
+                return "";  // Don't fall through to interactive auth in TUI mode
             }
         } else {
             return access_token;
@@ -435,12 +442,8 @@ bool YouTubeExtractor::refresh_access_token() {
         return "";
     }
 
-    // No token, try to authenticate
-    if (authenticate_oauth()) {
-        return Config::instance().get_youtube_access_token();
-    }
-
-    return "";
+    Logger::info("No access token found - run 'moostream auth' to authenticate");
+    return "";  // Don't call authenticate_oauth() - it requires interactive input
 }
 
 std::string YouTubeExtractor::url_encode(const std::string& input) {

@@ -32,8 +32,12 @@ std::string HttpClient::get(const std::string& url, const std::string& auth_toke
         return "";
     }
 
+    // Reset handle to clear any previous POST state
+    curl_easy_reset(curl_);
+
     std::string response;
     curl_easy_setopt(curl_, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl_, CURLOPT_HTTPGET, 1L);  // Explicitly set GET
     curl_easy_setopt(curl_, CURLOPT_WRITEFUNCTION, write_callback);
     curl_easy_setopt(curl_, CURLOPT_WRITEDATA, &response);
     curl_easy_setopt(curl_, CURLOPT_TIMEOUT, 10L);  // 10 second timeout
@@ -64,6 +68,8 @@ std::string HttpClient::post(const std::string& url, const std::string& data, co
         Logger::error("CURL not initialized");
         return "";
     }
+
+    curl_easy_reset(curl_);
 
     std::string response;
     curl_easy_setopt(curl_, CURLOPT_URL, url.c_str());
