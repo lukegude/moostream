@@ -31,6 +31,7 @@ public:
 
     // OAuth authentication
     std::string get_access_token();
+    bool authenticate_oauth();
 
     // Public for testing
     std::string decode_unicode_escapes(const std::string& input);
@@ -51,7 +52,6 @@ private:
     Track parse_api_video_item(const nlohmann::json& item);
 
     // OAuth methods
-    bool authenticate_oauth();
     bool refresh_access_token();
 
     std::string ytdlp_path_;

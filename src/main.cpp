@@ -56,8 +56,7 @@ void run_auth() {
     // Create extractor and run auth
     auto extractor = std::make_unique<ytui::YouTubeExtractor>();
 
-    std::string token = extractor->get_access_token();
-    if (!token.empty()) {
+    if (extractor->authenticate_oauth()) {
         std::cout << "✓ Authentication successful!" << std::endl;
         std::cout << "You can now use the application normally: ./moostream" << std::endl;
     } else {
